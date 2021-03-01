@@ -6,3 +6,8 @@ slprj
 .DS_Store
 *.asv
 *.mat
+__pycache__/
+*.py[cod]
+.coverage
+build/
+
