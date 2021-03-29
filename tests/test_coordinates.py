@@ -57,5 +57,47 @@ class GeodeticToECEFTests(unittest.TestCase):
                 coordinates.geodetic_to_ecef(latitude, longitude)
 
 
+class ECEFToGeodeticTests(unittest.TestCase):
+    def test_inverse_equator_and_date_line(self):
+        self.assertEqual(coordinates.ecef_to_geodetic(6378137.0, 0, 0), (0, 0, 0))
+        latitude, longitude, altitude = coordinates.ecef_to_geodetic(-6378257, 0, 0)
+        self.assertEqual((latitude, longitude), (0, math.pi))
+        self.assertAlmostEqual(altitude, 120, places=7)
+
+    def test_exact_poles_have_canonical_zero_longitude(self):
+        for sign in (-1, 1):
+            actual = coordinates.ecef_to_geodetic(0, 0, sign * 6356852.314245179)
+            self.assertEqual(actual[:2], (sign * math.pi / 2, 0))
+            self.assertAlmostEqual(actual[2], 100.0, places=7)
+
+    def test_round_trip_across_hemispheres_and_heights(self):
+        for latitude in (-1.55, -0.8, 0.0, 0.7, 1.55):
+            for longitude in (-math.pi, -1.4, 0.0, 2.3, math.pi):
+                for altitude in (-400.0, 0.0, 5000.0, 35786000.0):
+                    with self.subTest(latitude=latitude, longitude=longitude, altitude=altitude):
+                        point = coordinates.geodetic_to_ecef(latitude, longitude, altitude)
+                        actual = coordinates.ecef_to_geodetic(*point)
+                        self.assertAlmostEqual(actual[0], latitude, places=12)
+                        self.assertAlmostEqual(actual[1], longitude, places=12)
+                        self.assertAlmostEqual(actual[2], altitude, places=6)
+
+    def test_near_polar_inverse_is_not_divided_by_cosine(self):
+        point = coordinates.geodetic_to_ecef(math.pi / 2 - 1e-12, 0.3, 123)
+        actual = coordinates.ecef_to_geodetic(*point)
+        self.assertAlmostEqual(actual[0], math.pi / 2 - 1e-12, places=13)
+        self.assertAlmostEqual(actual[1], 0.3, places=12)
+        self.assertAlmostEqual(actual[2], 123, places=7)
+
+    def test_rejects_geocenter_and_nonfinite_components(self):
+        with self.assertRaisesRegex(ValueError, "center"):
+            coordinates.ecef_to_geodetic(0, 0, 0)
+        for index in range(3):
+            for invalid in (math.nan, math.inf, -math.inf, None):
+                point = [1.0, 1.0, 1.0]
+                point[index] = invalid
+                with self.assertRaises(ValueError):
+                    coordinates.ecef_to_geodetic(*point)
+
+
 if __name__ == "__main__":
     unittest.main()

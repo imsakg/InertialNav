@@ -41,3 +41,35 @@ def geodetic_to_ecef(latitude, longitude, altitude=0.0):
         (radius + altitude) * cos_latitude * math.sin(longitude),
         (radius * (1.0 - WGS84_E2) + altitude) * sin_latitude,
     )
+
+
+def ecef_to_geodetic(x, y, z):
+    """Return (latitude, longitude, ellipsoid height); angles are radians.
+
+    At exact poles longitude is canonically zero. The geocenter has no
+    geodetic latitude and is rejected. Iteration is intended for navigation
+    positions near/outside the ellipsoid, not ambiguous deep-interior points.
+    """
+    x, y, z = (_finite(value, name) for value, name in zip((x, y, z), "xyz"))
+    horizontal = math.hypot(x, y)
+    if horizontal == 0.0:
+        if z == 0.0:
+            raise ValueError("geodetic coordinates are undefined at Earth's center")
+        return math.copysign(math.pi / 2, z), 0.0, abs(z) - WGS84_B
+    longitude = math.atan2(y, x)
+    latitude = math.atan2(z, horizontal * (1.0 - WGS84_E2))
+    for _ in range(16):
+        sin_latitude = math.sin(latitude)
+        radius = WGS84_A / math.sqrt(1.0 - WGS84_E2 * sin_latitude ** 2)
+        updated = math.atan2(z + WGS84_E2 * radius * sin_latitude, horizontal)
+        if abs(updated - latitude) <= 2e-15:
+            latitude = updated
+            break
+        latitude = updated
+    else:
+        raise ValueError("geodetic latitude did not converge for this ECEF point")
+    sin_latitude, cos_latitude = math.sin(latitude), math.cos(latitude)
+    # Project onto the ellipsoid normal instead of dividing by cos(latitude).
+    altitude = (horizontal * cos_latitude + z * sin_latitude
+                - WGS84_A * math.sqrt(1.0 - WGS84_E2 * sin_latitude ** 2))
+    return latitude, longitude, altitude
