@@ -99,5 +99,38 @@ class ECEFToGeodeticTests(unittest.TestCase):
                     coordinates.ecef_to_geodetic(*point)
 
 
+class LocalVectorTests(unittest.TestCase):
+    def test_equatorial_axes_distinguish_vectors_from_points(self):
+        self.assertEqual(coordinates.ecef_to_ned_vector((1, 2, 3), 0, 0), (3, 2, -1))
+        self.assertEqual(coordinates.ned_to_ecef_vector((3, 2, -1), 0, 0), (1, 2, 3))
+        self.assertEqual(coordinates.ecef_to_ned_vector((0, 0, 0), 0, 0), (0, 0, 0))
+
+    def test_east_longitude_rotates_east_axis(self):
+        actual = coordinates.ecef_to_ned_vector((1, 2, 3), 0, math.pi / 2)
+        for value, reference in zip(actual, (3, -1, -2)):
+            self.assertAlmostEqual(value, reference, places=12)
+
+    def test_inverse_rotations_preserve_vector_and_norm(self):
+        vector = (123.0, -45.0, 67.0)
+        for latitude in (-math.pi / 2, -0.5, 0, 1.2, math.pi / 2):
+            for longitude in (-math.pi, 0, 1.4, math.pi):
+                local = coordinates.ecef_to_ned_vector(vector, latitude, longitude)
+                inverse = coordinates.ned_to_ecef_vector(local, latitude, longitude)
+                self.assertAlmostEqual(math.hypot(*local), math.hypot(*vector), places=11)
+                for value, reference in zip(inverse, vector):
+                    self.assertAlmostEqual(value, reference, places=11)
+
+    def test_rejects_bad_dimensions_and_nonfinite_vectors_or_origins(self):
+        for transform in (coordinates.ecef_to_ned_vector, coordinates.ned_to_ecef_vector):
+            for vector in ((), (1, 2), (1, 2, 3, 4), None, "123", (1, math.nan, 3),
+                           (1, 2, math.inf), (-math.inf, 2, 3)):
+                with self.subTest(transform=transform.__name__, vector=vector):
+                    with self.assertRaises(ValueError):
+                        transform(vector, 0, 0)
+            for latitude, longitude in ((math.nan, 0), (0, math.inf), (2, 0), (0, 4)):
+                with self.assertRaises(ValueError):
+                    transform((1, 2, 3), latitude, longitude)
+
+
 if __name__ == "__main__":
     unittest.main()

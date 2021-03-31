@@ -73,3 +73,44 @@ def ecef_to_geodetic(x, y, z):
     altitude = (horizontal * cos_latitude + z * sin_latitude
                 - WGS84_A * math.sqrt(1.0 - WGS84_E2 * sin_latitude ** 2))
     return latitude, longitude, altitude
+
+
+def _vector(values, name="vector"):
+    if isinstance(values, (str, bytes)):
+        raise ValueError("{} must have three finite components".format(name))
+    try:
+        values = tuple(values)
+    except TypeError as exc:
+        raise ValueError("{} must have three finite components".format(name)) from exc
+    if len(values) != 3:
+        raise ValueError("{} must have three finite components".format(name))
+    return tuple(_finite(value, name) for value in values)
+
+
+def _ned_basis(latitude, longitude):
+    latitude, longitude = _angles(latitude, longitude)
+    slat, clat = math.sin(latitude), math.cos(latitude)
+    slon, clon = math.sin(longitude), math.cos(longitude)
+    return (
+        (-slat * clon, -slat * slon, clat),
+        (-slon, clon, 0.0),
+        (-clat * clon, -clat * slon, -slat),
+    )
+
+
+def ecef_to_ned_vector(vector, latitude, longitude):
+    """Rotate a free ECEF vector into NED at the given geodetic angles.
+
+    No origin translation is applied; units and magnitude are preserved.
+    """
+    vector = _vector(vector)
+    return tuple(sum(a * b for a, b in zip(row, vector))
+                 for row in _ned_basis(latitude, longitude))
+
+
+def ned_to_ecef_vector(vector, latitude, longitude):
+    """Rotate a free NED vector into ECEF, without translating a point."""
+    vector = _vector(vector)
+    basis = _ned_basis(latitude, longitude)
+    return tuple(sum(basis[row][column] * vector[row] for row in range(3))
+                 for column in range(3))
