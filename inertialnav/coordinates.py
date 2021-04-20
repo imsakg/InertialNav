@@ -114,3 +114,15 @@ def ned_to_ecef_vector(vector, latitude, longitude):
     basis = _ned_basis(latitude, longitude)
     return tuple(sum(basis[row][column] * vector[row] for row in range(3))
                  for column in range(3))
+
+
+def geodetic_to_ned(point, origin):
+    """Map a geodetic triple to NED metres relative to a geodetic origin.
+
+    Both triples contain (latitude radians, longitude radians, height metres).
+    The result is the ECEF chord displacement resolved in the origin's axes.
+    """
+    point, origin = _vector(point, "point"), _vector(origin, "origin")
+    ecef_point, ecef_origin = geodetic_to_ecef(*point), geodetic_to_ecef(*origin)
+    displacement = tuple(value - reference for value, reference in zip(ecef_point, ecef_origin))
+    return ecef_to_ned_vector(displacement, origin[0], origin[1])

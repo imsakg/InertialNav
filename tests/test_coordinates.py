@@ -132,5 +132,36 @@ class LocalVectorTests(unittest.TestCase):
                     transform((1, 2, 3), latitude, longitude)
 
 
+class GeodeticToNEDTests(unittest.TestCase):
+    def test_origin_maps_to_zero_and_height_maps_to_negative_down(self):
+        origin = (0.7, 1.2, 500.0)
+        self.assertEqual(coordinates.geodetic_to_ned(origin, origin), (0, 0, 0))
+        actual = coordinates.geodetic_to_ned((0.7, 1.2, 525.0), origin)
+        for value, reference in zip(actual, (0, 0, -25)):
+            self.assertAlmostEqual(value, reference, places=8)
+
+    def test_east_point_is_translated_before_rotation(self):
+        angle = 1e-3
+        actual = coordinates.geodetic_to_ned((0, angle, 0), (0, 0, 0))
+        self.assertEqual(actual[0], 0)
+        self.assertAlmostEqual(actual[1], 6378137 * math.sin(angle), places=8)
+        self.assertAlmostEqual(actual[2], 6378137 * (1 - math.cos(angle)), places=8)
+
+    def test_date_line_uses_short_ecef_displacement(self):
+        actual = coordinates.geodetic_to_ned(
+            (0, -math.pi + 1e-6, 0), (0, math.pi - 1e-6, 0)
+        )
+        self.assertAlmostEqual(actual[1], 12.756274, places=6)
+        self.assertAlmostEqual(actual[0], 0, places=10)
+        self.assertLess(abs(actual[2]), 2e-5)
+
+    def test_point_and_origin_are_finite_geodetic_triples(self):
+        for invalid in ((), (0, 0), (0, 0, 0, 0), "000", None,
+                        (math.nan, 0, 0), (0, math.inf, 0), (0, 0, -math.inf), (2, 0, 0)):
+            for point, origin in ((invalid, (0, 0, 0)), ((0, 0, 0), invalid)):
+                with self.assertRaises(ValueError):
+                    coordinates.geodetic_to_ned(point, origin)
+
+
 if __name__ == "__main__":
     unittest.main()
