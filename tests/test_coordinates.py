@@ -163,5 +163,45 @@ class GeodeticToNEDTests(unittest.TestCase):
                     coordinates.geodetic_to_ned(point, origin)
 
 
+class NEDToGeodeticTests(unittest.TestCase):
+    def test_zero_and_vertical_displacement(self):
+        origin = (0.4, -1.2, 200)
+        for down in (0, -50, 75):
+            actual = coordinates.ned_to_geodetic((0, 0, down), origin)
+            self.assertAlmostEqual(actual[0], origin[0], places=12)
+            self.assertAlmostEqual(actual[1], origin[1], places=12)
+            self.assertAlmostEqual(actual[2], origin[2] - down, places=7)
+
+    def test_local_round_trips_including_polar_and_date_line_origins(self):
+        for origin in ((0, 0, 0), (0.8, 2.2, 1000), (-1.2, -3.14, -300),
+                       (math.pi / 2, 1.3, 0), (-math.pi / 2, -2.0, 400),
+                       (0, math.pi - 1e-7, 0)):
+            for local in ((0, 0, 0), (1000, -2000, 35), (-50, 70, -200)):
+                with self.subTest(origin=origin, local=local):
+                    point = coordinates.ned_to_geodetic(local, origin)
+                    recovered = coordinates.geodetic_to_ned(point, origin)
+                    for value, reference in zip(recovered, local):
+                        self.assertAlmostEqual(value, reference, places=6)
+
+    def test_geodetic_point_round_trip(self):
+        origin = (0.75, -2.0, 15)
+        point = (0.7502, -1.9999, 140)
+        recovered = coordinates.ned_to_geodetic(coordinates.geodetic_to_ned(point, origin), origin)
+        self.assertAlmostEqual(recovered[0], point[0], places=12)
+        self.assertAlmostEqual(recovered[1], point[1], places=12)
+        self.assertAlmostEqual(recovered[2], point[2], places=7)
+
+    def test_rejects_geocenter_and_invalid_local_or_origin(self):
+        with self.assertRaisesRegex(ValueError, "center"):
+            coordinates.ned_to_geodetic((0, 0, 6378137), (0, 0, 0))
+        for invalid in ((), (1, 2), (1, 2, 3, 4), "123", None, (0, math.nan, 0),
+                        (0, 0, math.inf), (0, -math.inf, 0)):
+            for local, origin in ((invalid, (0, 0, 0)), ((0, 0, 0), invalid)):
+                with self.assertRaises(ValueError):
+                    coordinates.ned_to_geodetic(local, origin)
+        with self.assertRaises(ValueError):
+            coordinates.ned_to_geodetic((0, 0, 0), (2, 0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

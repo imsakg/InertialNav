@@ -126,3 +126,12 @@ def geodetic_to_ned(point, origin):
     ecef_point, ecef_origin = geodetic_to_ecef(*point), geodetic_to_ecef(*origin)
     displacement = tuple(value - reference for value, reference in zip(ecef_point, ecef_origin))
     return ecef_to_ned_vector(displacement, origin[0], origin[1])
+
+
+def ned_to_geodetic(point, origin):
+    """Invert a fixed-origin NED point mapping, returning geodetic radians/metres."""
+    point, origin = _vector(point, "point"), _vector(origin, "origin")
+    ecef_origin = geodetic_to_ecef(*origin)
+    displacement = ned_to_ecef_vector(point, origin[0], origin[1])
+    ecef_point = tuple(value + reference for value, reference in zip(displacement, ecef_origin))
+    return ecef_to_geodetic(*ecef_point)
