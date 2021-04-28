@@ -203,5 +203,33 @@ class NEDToGeodeticTests(unittest.TestCase):
             coordinates.ned_to_geodetic((0, 0, 0), (2, 0, 0))
 
 
+class ENUNEDTests(unittest.TestCase):
+    def test_axis_order_and_up_down_sign(self):
+        self.assertEqual(coordinates.enu_to_ned((4, 5, 6)), (5, 4, -6))
+        self.assertEqual(coordinates.ned_to_enu((5, 4, -6)), (4, 5, 6))
+        for source, expected in (((1, 0, 0), (0, 1, 0)),
+                                 ((0, 1, 0), (1, 0, 0)),
+                                 ((0, 0, 1), (0, 0, -1))):
+            self.assertEqual(coordinates.enu_to_ned(source), expected)
+
+    def test_zero_and_general_round_trips_preserve_norm(self):
+        for vector in ((0, 0, 0), (-2.3, 1.4, -8.2), (1e100, -2e100, 3e100)):
+            ned = coordinates.enu_to_ned(vector)
+            self.assertEqual(coordinates.ned_to_enu(ned), vector)
+            self.assertEqual(math.hypot(*ned), math.hypot(*vector))
+
+    def test_rejects_dimensions_and_each_nonfinite_component(self):
+        for transform in (coordinates.enu_to_ned, coordinates.ned_to_enu):
+            for invalid in ((), (1, 2), (1, 2, 3, 4), None, "123"):
+                with self.assertRaises(ValueError):
+                    transform(invalid)
+            for index in range(3):
+                for invalid in (math.nan, math.inf, -math.inf):
+                    vector = [1, 2, 3]
+                    vector[index] = invalid
+                    with self.assertRaises(ValueError):
+                        transform(vector)
+
+
 if __name__ == "__main__":
     unittest.main()

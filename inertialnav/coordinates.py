@@ -135,3 +135,15 @@ def ned_to_geodetic(point, origin):
     displacement = ned_to_ecef_vector(point, origin[0], origin[1])
     ecef_point = tuple(value + reference for value, reference in zip(displacement, ecef_origin))
     return ecef_to_geodetic(*ecef_point)
+
+
+def enu_to_ned(vector):
+    """Swap east/north and negate up; applies to vectors or shared-origin points."""
+    east, north, up = _vector(vector)
+    return north, east, -up
+
+
+def ned_to_enu(vector):
+    """Swap north/east and negate down; inverse of :func:`enu_to_ned`."""
+    north, east, down = _vector(vector)
+    return east, north, -down
