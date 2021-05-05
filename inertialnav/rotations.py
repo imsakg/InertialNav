@@ -48,3 +48,26 @@ def normalize(q):
     scaled = tuple(value / scale for value in q)
     magnitude = math.hypot(*scaled)
     return tuple(value / magnitude for value in scaled)
+
+
+def multiply(q1, q2):
+    """Return the Hamilton product q1*q2, without normalizing either operand.
+
+    For unit attitudes q2 acts first, then q1. Nonzero finite raw operands are
+    accepted, but an unrepresentable (nonfinite or underflowed zero) result is
+    rejected. Normalize separately when composing accumulated attitudes.
+    """
+    a, b, c, d = _quaternion(q1)
+    e, f, g, h = _quaternion(q2)
+    return _quaternion((
+        a * e - b * f - c * g - d * h,
+        a * f + b * e + c * h - d * g,
+        a * g - b * h + c * e + d * f,
+        a * h + b * g - c * f + d * e,
+    ))
+
+
+def conjugate(q):
+    """Return (w, -x, -y, -z); this is the inverse only for a unit quaternion."""
+    w, x, y, z = _quaternion(q)
+    return w, -x, -y, -z
