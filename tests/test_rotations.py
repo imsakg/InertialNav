@@ -79,5 +79,48 @@ class HamiltonAlgebraTests(unittest.TestCase):
             rotations.multiply((1e308, 0, 0, 0), (1e308, 0, 0, 0))
 
 
+class ActiveVectorRotationTests(unittest.TestCase):
+    def assertVectorClose(self, actual, expected):
+        self.assertIsInstance(actual, tuple)
+        self.assertEqual(len(actual), 3)
+        for value, reference in zip(actual, expected):
+            self.assertAlmostEqual(value, reference, places=13)
+
+    def test_positive_yaw_maps_body_forward_to_ned_east(self):
+        half = math.sqrt(0.5)
+        self.assertVectorClose(rotations.rotate((half, 0, 0, half), (1, 0, 0)), (0, 1, 0))
+        self.assertVectorClose(rotations.rotate((half, half, 0, 0), (0, 1, 0)), (0, 0, 1))
+        self.assertVectorClose(rotations.rotate((half, 0, half, 0), (1, 0, 0)), (0, 0, -1))
+
+    def test_identity_zero_and_scaled_sign_equivalent_attitudes(self):
+        vector = (2, -3, 5)
+        self.assertVectorClose(rotations.rotate((7, 0, 0, 0), vector), vector)
+        self.assertEqual(rotations.rotate((1, 2, 3, 4), (0, 0, 0)), (0, 0, 0))
+        baseline = rotations.rotate((1, 2, -3, 4), vector)
+        for scale in (-7, 1e100, 1e-100):
+            actual = rotations.rotate(tuple(scale * value for value in (1, 2, -3, 4)), vector)
+            self.assertVectorClose(actual, baseline)
+
+    def test_rotation_agrees_with_sandwich_and_composition(self):
+        q1, q2 = rotations.normalize((1, 2, 3, 4)), rotations.normalize((2, -3, 4, 1))
+        vector = (0.3, -2, 5)
+        sandwich = rotations.multiply(rotations.multiply(q1, (0,) + vector), rotations.conjugate(q1))
+        actual = rotations.rotate(q1, vector)
+        self.assertVectorClose(actual, sandwich[1:])
+        self.assertAlmostEqual(math.hypot(*actual), math.hypot(*vector), places=13)
+        self.assertVectorClose(rotations.rotate(rotations.conjugate(q1), actual), vector)
+        self.assertVectorClose(rotations.rotate(rotations.multiply(q1, q2), vector),
+                               rotations.rotate(q1, rotations.rotate(q2, vector)))
+
+    def test_vector_and_attitude_validation(self):
+        for invalid in ((), (1, 2), (1, 2, 3, 4), None, "123",
+                        (math.nan, 0, 0), (0, math.inf, 0), (0, 0, -math.inf)):
+            with self.assertRaises(ValueError):
+                rotations.rotate((1, 0, 0, 0), invalid)
+        for invalid in ((0, 0, 0, 0), (1, 2, 3), (1, math.nan, 0, 0)):
+            with self.assertRaises(ValueError):
+                rotations.rotate(invalid, (1, 2, 3))
+
+
 if __name__ == "__main__":
     unittest.main()

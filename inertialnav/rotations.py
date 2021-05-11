@@ -71,3 +71,20 @@ def conjugate(q):
     """Return (w, -x, -y, -z); this is the inverse only for a unit quaternion."""
     w, x, y, z = _quaternion(q)
     return w, -x, -y, -z
+
+
+def rotate(q, vector):
+    """Actively rotate a three-vector by q (body components to NED components).
+
+    The attitude is normalized internally; q and -q produce the same vector.
+    Use ``conjugate(normalize(q))`` for the opposite frame transformation.
+    """
+    w, x, y, z = normalize(q)
+    vector = _components(vector, 3, "vector")
+    matrix = (
+        (w*w + x*x - y*y - z*z, 2*(x*y - w*z), 2*(x*z + w*y)),
+        (2*(x*y + w*z), w*w - x*x + y*y - z*z, 2*(y*z - w*x)),
+        (2*(x*z - w*y), 2*(y*z + w*x), w*w - x*x - y*y + z*z),
+    )
+    result = tuple(sum(a * b for a, b in zip(row, vector)) for row in matrix)
+    return _components(result, 3, "rotated vector")
