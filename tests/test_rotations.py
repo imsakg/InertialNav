@@ -122,5 +122,41 @@ class ActiveVectorRotationTests(unittest.TestCase):
                 rotations.rotate(invalid, (1, 2, 3))
 
 
+class EulerToQuaternionTests(unittest.TestCase):
+    def test_zero_and_single_axis_half_angles(self):
+        self.assertEqual(rotations.from_euler(0, 0, 0), (1, 0, 0, 0))
+        half = math.sqrt(0.5)
+        for angles, expected in (((math.pi / 2, 0, 0), (half, half, 0, 0)),
+                                 ((0, math.pi / 2, 0), (half, 0, half, 0)),
+                                 ((0, 0, math.pi / 2), (half, 0, 0, half))):
+            for actual, reference in zip(rotations.from_euler(*angles), expected):
+                self.assertAlmostEqual(actual, reference, places=14)
+
+    def test_zyx_sequence_is_yaw_times_pitch_times_roll(self):
+        roll, pitch, yaw = 0.3, -0.6, 1.2
+        qx = (math.cos(roll / 2), math.sin(roll / 2), 0, 0)
+        qy = (math.cos(pitch / 2), 0, math.sin(pitch / 2), 0)
+        qz = (math.cos(yaw / 2), 0, 0, math.sin(yaw / 2))
+        expected = rotations.multiply(rotations.multiply(qz, qy), qx)
+        actual = rotations.from_euler(roll, pitch, yaw)
+        for value, reference in zip(actual, expected):
+            self.assertAlmostEqual(value, reference, places=14)
+        self.assertAlmostEqual(math.hypot(*actual), 1, places=14)
+
+    def test_radians_and_body_to_ned_heading(self):
+        actual = rotations.rotate(rotations.from_euler(0, 0, math.pi / 2), (1, 0, 0))
+        for value, reference in zip(actual, (0, 1, 0)):
+            self.assertAlmostEqual(value, reference, places=14)
+        self.assertAlmostEqual(math.hypot(*rotations.from_euler(1e100, -1e100, 1e100)), 1, places=14)
+
+    def test_rejects_nonfinite_or_nonnumeric_euler_angles(self):
+        for index in range(3):
+            for invalid in (math.nan, math.inf, -math.inf, None, "bad"):
+                angles = [0.0] * 3
+                angles[index] = invalid
+                with self.assertRaises(ValueError):
+                    rotations.from_euler(*angles)
+
+
 if __name__ == "__main__":
     unittest.main()

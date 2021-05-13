@@ -88,3 +88,18 @@ def rotate(q, vector):
     )
     result = tuple(sum(a * b for a, b in zip(row, vector)) for row in matrix)
     return _components(result, 3, "rotated vector")
+
+
+def from_euler(roll, pitch, yaw):
+    """Return a unit ZYX attitude: Rz(yaw)*Ry(pitch)*Rx(roll), in radians."""
+    roll, pitch, yaw = (_finite(value, name)
+                        for value, name in zip((roll, pitch, yaw), ("roll", "pitch", "yaw")))
+    cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+    cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+    cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+    return normalize((
+        cr * cp * cy + sr * sp * sy,
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+    ))
