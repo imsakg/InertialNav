@@ -103,3 +103,25 @@ def from_euler(roll, pitch, yaw):
         cr * sp * cy + sr * cp * sy,
         cr * cp * sy - sr * sp * cy,
     ))
+
+
+def to_euler(q):
+    """Return canonical (roll, pitch, yaw) radians from a normalized attitude.
+
+    Pitch lies in [-pi/2, pi/2]; roll/yaw lie in [-pi, pi]. At gimbal lock
+    (|cos(pitch)| <= 1e-12), choose roll=0 and preserve the observable heading.
+    The individual roll/yaw angles are not uniquely observable there.
+    """
+    w, x, y, z = normalize(q)
+    r00 = w*w + x*x - y*y - z*z
+    r10 = 2 * (x*y + w*z)
+    r20 = 2 * (x*z - w*y)
+    cos_pitch = math.hypot(r00, r10)
+    pitch = math.atan2(-r20, cos_pitch)
+    if cos_pitch <= 1e-12:
+        roll = 0.0
+        yaw = math.atan2(2 * (w*z - x*y), w*w - x*x + y*y - z*z)
+    else:
+        roll = math.atan2(2 * (y*z + w*x), w*w - x*x - y*y + z*z)
+        yaw = math.atan2(r10, r00)
+    return roll, pitch, yaw

@@ -158,5 +158,52 @@ class EulerToQuaternionTests(unittest.TestCase):
                     rotations.from_euler(*angles)
 
 
+class QuaternionToEulerTests(unittest.TestCase):
+    def test_identity_and_regular_radian_round_trips(self):
+        self.assertEqual(rotations.to_euler((1, 0, 0, 0)), (0, 0, 0))
+        for angles in ((0.3, -0.6, 1.2), (-2.4, 1.4, -2.7), (2.8, -1.4, 3.0)):
+            actual = rotations.to_euler(rotations.from_euler(*angles))
+            self.assertIsInstance(actual, tuple)
+            for value, reference in zip(actual, angles):
+                self.assertAlmostEqual(value, reference, places=13)
+
+    def test_canonical_ranges_reconstruct_noncanonical_inputs(self):
+        for angles in ((4.0, 2.4, -5.0), (-6.0, -2.0, 7.0), (0.3, math.pi, -0.7)):
+            original = rotations.from_euler(*angles)
+            roll, pitch, yaw = rotations.to_euler(original)
+            self.assertLessEqual(abs(roll), math.pi)
+            self.assertLessEqual(abs(pitch), math.pi / 2)
+            self.assertLessEqual(abs(yaw), math.pi)
+            recovered = rotations.from_euler(roll, pitch, yaw)
+            self.assertAlmostEqual(abs(sum(a * b for a, b in zip(original, recovered))), 1, places=14)
+
+    def test_both_gimbal_locks_choose_zero_roll_without_changing_rotation(self):
+        for pitch in (-math.pi / 2, math.pi / 2):
+            for roll, yaw in ((0.3, 1.2), (-2.0, -0.7), (0, 0)):
+                original = rotations.from_euler(roll, pitch, yaw)
+                actual = rotations.to_euler(original)
+                self.assertEqual(actual[0], 0.0)
+                self.assertAlmostEqual(actual[1], pitch, places=14)
+                recovered = rotations.from_euler(*actual)
+                for vector in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
+                    for value, reference in zip(rotations.rotate(recovered, vector),
+                                                rotations.rotate(original, vector)):
+                        self.assertAlmostEqual(value, reference, places=13)
+
+    def test_normalizes_and_is_sign_invariant(self):
+        original = rotations.from_euler(0.3, 0.7, -1.2)
+        expected = rotations.to_euler(original)
+        for scale in (-7.0, 1e300, 1e-300):
+            actual = rotations.to_euler(tuple(scale * value for value in original))
+            for value, reference in zip(actual, expected):
+                self.assertAlmostEqual(value, reference, places=13)
+
+    def test_rejects_bad_quaternions(self):
+        for invalid in ((0, 0, 0, 0), (), (1, 2, 3), (1, 2, 3, 4, 5), None, "1234",
+                        (math.nan, 0, 0, 0), (1, math.inf, 0, 0), (1, 0, -math.inf, 0)):
+            with self.assertRaises(ValueError):
+                rotations.to_euler(invalid)
+
+
 if __name__ == "__main__":
     unittest.main()
