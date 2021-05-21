@@ -205,5 +205,57 @@ class QuaternionToEulerTests(unittest.TestCase):
                 rotations.to_euler(invalid)
 
 
+class RotationVectorTests(unittest.TestCase):
+    def test_zero_and_quarter_turn_axes(self):
+        self.assertEqual(rotations.from_rotation_vector((0, 0, 0)), (1, 0, 0, 0))
+        for index in range(3):
+            vector = [0.0, 0.0, 0.0]
+            vector[index] = math.pi / 2
+            angles = [0.0, 0.0, 0.0]
+            angles[index] = math.pi / 2
+            for actual, expected in zip(rotations.from_rotation_vector(vector), rotations.from_euler(*angles)):
+                self.assertAlmostEqual(actual, expected, places=14)
+
+    def test_tiny_increment_retains_first_order_vector_part(self):
+        vector = (1e-14, -2e-14, 3e-14)
+        actual = rotations.from_rotation_vector(vector)
+        self.assertEqual(actual[0], 1.0)
+        for value, reference in zip(actual[1:], vector):
+            self.assertAlmostEqual(value / reference, 0.5, places=14)
+        self.assertAlmostEqual(math.hypot(*actual), 1, places=15)
+
+    def test_oblique_axis_matches_rodrigues_formula(self):
+        axis = tuple(value / math.sqrt(29) for value in (2, -3, 4))
+        angle, vector = 1.1, (0.3, -1.2, 2.7)
+        rotation_vector = tuple(angle * value for value in axis)
+        quaternion = rotations.from_rotation_vector(rotation_vector)
+        cross = (axis[1]*vector[2] - axis[2]*vector[1],
+                 axis[2]*vector[0] - axis[0]*vector[2],
+                 axis[0]*vector[1] - axis[1]*vector[0])
+        dot = sum(a * b for a, b in zip(axis, vector))
+        expected = tuple(value * math.cos(angle) + turn * math.sin(angle)
+                         + direction * dot * (1 - math.cos(angle))
+                         for value, turn, direction in zip(vector, cross, axis))
+        for actual, reference in zip(rotations.rotate(quaternion, vector), expected):
+            self.assertAlmostEqual(actual, reference, places=13)
+
+    def test_negation_inverts_and_collinear_steps_compose(self):
+        vector = (0.2, -0.3, 0.4)
+        positive = rotations.from_rotation_vector(vector)
+        negative = rotations.from_rotation_vector(tuple(-value for value in vector))
+        doubled = rotations.from_rotation_vector(tuple(2 * value for value in vector))
+        for actual, reference in zip(negative, rotations.conjugate(positive)):
+            self.assertAlmostEqual(actual, reference, places=14)
+        for actual, reference in zip(rotations.multiply(positive, positive), doubled):
+            self.assertAlmostEqual(actual, reference, places=14)
+
+    def test_rejects_dimensions_nonfinite_and_unrepresentable_angle(self):
+        for invalid in ((), (1, 2), (1, 2, 3, 4), None, "123", (math.nan, 0, 0),
+                        (0, math.inf, 0), (0, 0, -math.inf), (1.7e308,) * 3):
+            with self.assertRaises(ValueError):
+                rotations.from_rotation_vector(invalid)
+        self.assertAlmostEqual(math.hypot(*rotations.from_rotation_vector((1e308, 0, 0))), 1, places=14)
+
+
 if __name__ == "__main__":
     unittest.main()

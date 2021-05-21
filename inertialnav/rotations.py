@@ -125,3 +125,21 @@ def to_euler(q):
         roll = math.atan2(2 * (y*z + w*x), w*w - x*x - y*y + z*z)
         yaw = math.atan2(r10, r00)
     return roll, pitch, yaw
+
+
+def from_rotation_vector(vector):
+    """Exponentiate an axis-times-angle three-vector in radians to a unit q.
+
+    Zero maps to identity. A small-angle sinc expansion keeps tiny increments
+    instead of treating them as an exactly zero rotation.
+    """
+    vector = _components(vector, 3, "rotation vector")
+    angle = _finite(math.hypot(*vector), "rotation vector magnitude")
+    if angle < 1e-6:
+        squared = angle * angle
+        factor = 0.5 - squared / 48.0 + squared * squared / 3840.0
+        imaginary = tuple(factor * value for value in vector)
+    else:
+        sin_half = math.sin(angle / 2)
+        imaginary = tuple(sin_half * (value / angle) for value in vector)
+    return normalize((math.cos(angle / 2),) + imaginary)
