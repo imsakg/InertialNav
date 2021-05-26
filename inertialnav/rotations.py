@@ -143,3 +143,34 @@ def from_rotation_vector(vector):
         sin_half = math.sin(angle / 2)
         imaginary = tuple(sin_half * (value / angle) for value in vector)
     return normalize((math.cos(angle / 2),) + imaginary)
+
+
+def slerp(q0, q1, fraction):
+    """Interpolate unit attitudes on the shortest arc for fraction in [0, 1].
+
+    Normalize both inputs and flip q1 when needed; the last result may be -q1
+    because those signs describe the same attitude. Nearly coincident inputs
+    use normalized linear interpolation to avoid a small sine denominator.
+    Exactly half-turn-separated attitudes have two equally short arcs; their
+    supplied quaternion signs select the deterministic tie direction.
+    """
+    fraction = _finite(fraction, "fraction")
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError("fraction must be in [0, 1]")
+    q0, q1 = normalize(q0), normalize(q1)
+    dot = sum(a * b for a, b in zip(q0, q1))
+    if dot < 0.0:
+        q1 = tuple(-value for value in q1)
+        dot = -dot
+    dot = min(1.0, max(0.0, dot))
+    if fraction == 0.0:
+        return q0
+    if fraction == 1.0:
+        return q1
+    if dot > 0.9995:
+        return normalize(tuple((1 - fraction) * a + fraction * b for a, b in zip(q0, q1)))
+    angle = math.acos(dot)
+    denominator = math.sin(angle)
+    weight0 = math.sin((1 - fraction) * angle) / denominator
+    weight1 = math.sin(fraction * angle) / denominator
+    return normalize(tuple(weight0 * a + weight1 * b for a, b in zip(q0, q1)))

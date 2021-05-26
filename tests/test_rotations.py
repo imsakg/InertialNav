@@ -257,5 +257,54 @@ class RotationVectorTests(unittest.TestCase):
         self.assertAlmostEqual(math.hypot(*rotations.from_rotation_vector((1e308, 0, 0))), 1, places=14)
 
 
+class SlerpTests(unittest.TestCase):
+    def assertSameRotation(self, actual, expected, places=13):
+        self.assertAlmostEqual(math.hypot(*actual), 1, places=14)
+        self.assertAlmostEqual(abs(sum(a * b for a, b in zip(actual, expected))), 1, places=places)
+
+    def test_endpoints_and_constant_angular_speed(self):
+        start, end = (2, 0, 0, 0), rotations.from_euler(0, 0, 2.4)
+        for fraction in (0.0, 0.2, 0.5, 0.8, 1.0):
+            actual = rotations.slerp(start, end, fraction)
+            self.assertIsInstance(actual, tuple)
+            self.assertSameRotation(actual, rotations.from_euler(0, 0, 2.4 * fraction))
+            self.assertAlmostEqual(rotations.to_euler(actual)[2], 2.4 * fraction, places=13)
+
+    def test_antipodal_quaternions_and_near_identical_attitudes(self):
+        start = rotations.from_euler(0.3, -0.6, 1.2)
+        opposite = tuple(-value for value in start)
+        for fraction in (0, 0.3, 0.5, 1):
+            self.assertSameRotation(rotations.slerp(start, opposite, fraction), start)
+        tiny = rotations.from_euler(0, 0, 1e-10)
+        midpoint = rotations.slerp((1, 0, 0, 0), tiny, 0.5)
+        self.assertAlmostEqual(rotations.to_euler(midpoint)[2], 0.5e-10, places=22)
+
+    def test_shortest_heading_arc_crosses_the_date_line(self):
+        start = rotations.from_euler(0, 0, math.radians(170))
+        end = rotations.from_euler(0, 0, math.radians(-170))
+        for fraction in (0, 0.25, 0.5, 0.75, 1):
+            expected = rotations.from_euler(0, 0, math.radians(170 + 20 * fraction))
+            self.assertSameRotation(rotations.slerp(start, end, fraction), expected)
+            self.assertSameRotation(rotations.slerp(start, tuple(-value for value in end), fraction), expected)
+
+    def test_general_unit_interpolation_and_reversal_symmetry(self):
+        start, end = rotations.from_euler(0.5, -0.6, 0.2), rotations.from_euler(-0.2, 0.4, -1.2)
+        for fraction in (0.1, 0.4, 0.9):
+            forward = rotations.slerp(start, end, fraction)
+            backward = rotations.slerp(end, start, 1 - fraction)
+            self.assertSameRotation(forward, backward)
+
+    def test_rejects_invalid_fractions_and_either_bad_endpoint(self):
+        identity = (1, 0, 0, 0)
+        for fraction in (-0.01, 1.01, math.nan, math.inf, -math.inf, None, "bad"):
+            with self.assertRaises(ValueError):
+                rotations.slerp(identity, identity, fraction)
+        for invalid in ((0, 0, 0, 0), (), (1, 2, 3), (1, 2, 3, 4, 5), None, "1234",
+                        (1, math.nan, 0, 0), (1, 0, math.inf, 0), (1, 0, 0, -math.inf)):
+            for start, end in ((invalid, identity), (identity, invalid)):
+                with self.assertRaises(ValueError):
+                    rotations.slerp(start, end, 0.5)
+
+
 if __name__ == "__main__":
     unittest.main()
