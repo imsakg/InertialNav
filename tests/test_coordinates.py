@@ -231,5 +231,64 @@ class ENUNEDTests(unittest.TestCase):
                         transform(vector)
 
 
+class CoordinateRegressionTests(unittest.TestCase):
+    def test_nonrepresentable_ecef_and_vector_outputs_are_rejected(self):
+        cases = (
+            (coordinates.ecef_to_geodetic, (1.7e308, 1.7e308, 0)),
+            (coordinates.ecef_to_geodetic, (1.3e308, 0, 1.3e308)),
+            (coordinates.ecef_to_ned_vector, ((1.7e308, 1.7e308, 0), 0, -math.pi / 4)),
+            (coordinates.ned_to_ecef_vector, ((0, 1.7e308, 1.7e308), 0, math.pi / 4)),
+        )
+        for transform, arguments in cases:
+            with self.subTest(transform=transform.__name__, arguments=arguments):
+                with self.assertRaises(ValueError):
+                    transform(*arguments)
+
+    def test_seeded_global_geodetic_round_trips(self):
+        import random
+        rng = random.Random(70021)
+        for _ in range(500):
+            point = (rng.uniform(-math.pi / 2, math.pi / 2),
+                     rng.uniform(-math.pi, math.pi), rng.uniform(-500, 4e7))
+            actual = coordinates.ecef_to_geodetic(*coordinates.geodetic_to_ecef(*point))
+            self.assertAlmostEqual(actual[0], point[0], places=12)
+            self.assertAlmostEqual(actual[1], point[1], places=12)
+            self.assertAlmostEqual(actual[2], point[2], places=6)
+
+    def test_seeded_local_point_round_trips(self):
+        import random
+        rng = random.Random(70022)
+        for _ in range(200):
+            origin = (rng.uniform(-1.5, 1.5), rng.uniform(-math.pi, math.pi),
+                      rng.uniform(-400, 3000))
+            local = tuple(rng.uniform(-50000, 50000) for _ in range(3))
+            actual = coordinates.geodetic_to_ned(coordinates.ned_to_geodetic(local, origin), origin)
+            for value, reference in zip(actual, local):
+                self.assertAlmostEqual(value, reference, places=6)
+
+    def test_north_cross_east_is_down_at_general_and_polar_origins(self):
+        for latitude, longitude in ((0, 0), (0.7, -1.3), (math.pi / 2, 2.0), (-math.pi / 2, -0.4)):
+            north, east, down = (coordinates.ned_to_ecef_vector(vector, latitude, longitude)
+                                 for vector in ((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+            cross = (north[1]*east[2] - north[2]*east[1],
+                     north[2]*east[0] - north[0]*east[2],
+                     north[0]*east[1] - north[1]*east[0])
+            for value, reference in zip(cross, down):
+                self.assertAlmostEqual(value, reference, places=14)
+            for first, second in ((north, east), (east, down), (down, north)):
+                self.assertAlmostEqual(sum(a*b for a, b in zip(first, second)), 0, places=14)
+
+    def test_iterables_are_supported_without_mutating_lists(self):
+        point, origin, vector = [0.3, -0.2, 100], [0.2, -0.3, 50], [2, -4, 7]
+        snapshot = (point[:], origin[:], vector[:])
+        local = coordinates.geodetic_to_ned(iter(point), iter(origin))
+        coordinates.ned_to_geodetic(iter(local), iter(origin))
+        coordinates.ecef_to_ned_vector(vector, *origin[:2])
+        coordinates.ned_to_ecef_vector(vector, *origin[:2])
+        self.assertEqual(coordinates.enu_to_ned(iter(vector)), (-4, 2, -7))
+        self.assertEqual(coordinates.ned_to_enu(iter(vector)), (-4, 2, -7))
+        self.assertEqual((point, origin, vector), snapshot)
+
+
 if __name__ == "__main__":
     unittest.main()

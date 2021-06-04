@@ -51,7 +51,7 @@ def ecef_to_geodetic(x, y, z):
     positions near/outside the ellipsoid, not ambiguous deep-interior points.
     """
     x, y, z = (_finite(value, name) for value, name in zip((x, y, z), "xyz"))
-    horizontal = math.hypot(x, y)
+    horizontal = _finite(math.hypot(x, y), "ECEF horizontal magnitude")
     if horizontal == 0.0:
         if z == 0.0:
             raise ValueError("geodetic coordinates are undefined at Earth's center")
@@ -72,7 +72,7 @@ def ecef_to_geodetic(x, y, z):
     # Project onto the ellipsoid normal instead of dividing by cos(latitude).
     altitude = (horizontal * cos_latitude + z * sin_latitude
                 - WGS84_A * math.sqrt(1.0 - WGS84_E2 * sin_latitude ** 2))
-    return latitude, longitude, altitude
+    return latitude, longitude, _finite(altitude, "ellipsoid height")
 
 
 def _vector(values, name="vector"):
@@ -104,16 +104,18 @@ def ecef_to_ned_vector(vector, latitude, longitude):
     No origin translation is applied; units and magnitude are preserved.
     """
     vector = _vector(vector)
-    return tuple(sum(a * b for a, b in zip(row, vector))
-                 for row in _ned_basis(latitude, longitude))
+    result = tuple(sum(a * b for a, b in zip(row, vector))
+                   for row in _ned_basis(latitude, longitude))
+    return _vector(result, "rotated vector")
 
 
 def ned_to_ecef_vector(vector, latitude, longitude):
     """Rotate a free NED vector into ECEF, without translating a point."""
     vector = _vector(vector)
     basis = _ned_basis(latitude, longitude)
-    return tuple(sum(basis[row][column] * vector[row] for row in range(3))
-                 for column in range(3))
+    result = tuple(sum(basis[row][column] * vector[row] for row in range(3))
+                   for column in range(3))
+    return _vector(result, "rotated vector")
 
 
 def geodetic_to_ned(point, origin):

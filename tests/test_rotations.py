@@ -306,5 +306,100 @@ class SlerpTests(unittest.TestCase):
                     rotations.slerp(start, end, 0.5)
 
 
+class AttitudeRegressionTests(unittest.TestCase):
+    def test_seeded_euler_actions_agree_with_independent_zyx_matrix(self):
+        import random
+        rng = random.Random(70023)
+        for _ in range(300):
+            roll, pitch, yaw = (rng.uniform(-math.pi, math.pi) for _ in range(3))
+            cr, sr = math.cos(roll), math.sin(roll)
+            cp, sp = math.cos(pitch), math.sin(pitch)
+            cy, sy = math.cos(yaw), math.sin(yaw)
+            matrix = ((cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr),
+                      (sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr),
+                      (-sp, cp*sr, cp*cr))
+            vector = tuple(rng.uniform(-100, 100) for _ in range(3))
+            quaternion = rotations.from_euler(roll, pitch, yaw)
+            expected = tuple(sum(a*b for a, b in zip(row, vector)) for row in matrix)
+            for value, reference in zip(rotations.rotate(quaternion, vector), expected):
+                self.assertAlmostEqual(value, reference, places=10)
+            recovered = rotations.from_euler(*rotations.to_euler(quaternion))
+            for value, reference in zip(rotations.rotate(recovered, vector), expected):
+                self.assertAlmostEqual(value, reference, places=10)
+
+    def test_near_gimbal_lock_keeps_pitch_and_rotation_observable(self):
+        for sign in (-1, 1):
+            for distance in (1e-3, 1e-5, 1e-7, 1e-9, 1e-13):
+                pitch = sign * (math.pi / 2 - distance)
+                original = rotations.from_euler(0.7, pitch, -1.3)
+                angles = rotations.to_euler(original)
+                self.assertAlmostEqual(angles[1], pitch, places=13)
+                recovered = rotations.from_euler(*angles)
+                for value, reference in zip(rotations.rotate(recovered, (0.3, -0.4, 0.5)),
+                                            rotations.rotate(original, (0.3, -0.4, 0.5))):
+                    self.assertAlmostEqual(value, reference, delta=2e-7)
+
+    def test_repeated_body_frame_gyro_steps_match_one_exponential(self):
+        attitude = (1, 0, 0, 0)
+        increment = rotations.from_rotation_vector((0, 0, 0.001))
+        for _ in range(1000):
+            attitude = rotations.normalize(rotations.multiply(attitude, increment))
+        expected = rotations.from_rotation_vector((0, 0, 1))
+        for value, reference in zip(attitude, expected):
+            self.assertAlmostEqual(value, reference, places=12)
+
+    def test_exact_half_turn_interpolation_documents_sign_tie(self):
+        identity = (1, 0, 0, 0)
+        for sign in (-1, 1):
+            midpoint = rotations.slerp(identity, (0, sign, 0, 0), 0.5)
+            actual = rotations.rotate(midpoint, (0, 1, 0))
+            for value, reference in zip(actual, (0, 0, sign)):
+                self.assertAlmostEqual(value, reference, places=14)
+
+    def test_every_attitude_consumer_rejects_each_nonfinite_component(self):
+        identity = (1, 0, 0, 0)
+        consumers = (
+            rotations.normalize, rotations.conjugate, rotations.to_euler,
+            lambda q: rotations.rotate(q, (1, 2, 3)),
+            lambda q: rotations.multiply(q, identity),
+            lambda q: rotations.multiply(identity, q),
+            lambda q: rotations.slerp(q, identity, 0.5),
+            lambda q: rotations.slerp(identity, q, 0.5),
+        )
+        for index in range(4):
+            for invalid in (math.nan, math.inf, -math.inf):
+                quaternion = [1.0] * 4
+                quaternion[index] = invalid
+                for consume in consumers:
+                    with self.assertRaises(ValueError):
+                        consume(quaternion)
+
+    def test_overflowed_vector_output_and_underflowed_raw_product_are_rejected(self):
+        with self.assertRaises(ValueError):
+            rotations.rotate(rotations.from_euler(0, 0, math.pi / 4), (1.7e308, -1.7e308, 0))
+        with self.assertRaises(ValueError):
+            rotations.multiply((1e-300, 0, 0, 0), (1e-300, 0, 0, 0))
+
+    def test_iterables_and_lists_are_not_mutated(self):
+        quaternion, vector = [1, 2, 3, 4], [2, -4, 7]
+        snapshots = quaternion[:], vector[:]
+        rotations.normalize(iter(quaternion))
+        rotations.conjugate(iter(quaternion))
+        rotations.multiply(iter(quaternion), iter(quaternion))
+        rotations.rotate(iter(quaternion), iter(vector))
+        rotations.to_euler(iter(quaternion))
+        rotations.from_rotation_vector(iter(vector))
+        rotations.slerp(iter(quaternion), iter(quaternion), 0.5)
+        self.assertEqual((quaternion, vector), snapshots)
+
+    def test_documented_body_ned_ecef_composition(self):
+        from inertialnav import coordinates
+        attitude = rotations.from_euler(0, 0, math.pi / 2)
+        local = rotations.rotate(attitude, (1, 0, 0))
+        ecef = coordinates.ned_to_ecef_vector(local, 0, 0)
+        for value, reference in zip(ecef, (0, 1, 0)):
+            self.assertAlmostEqual(value, reference, places=14)
+
+
 if __name__ == "__main__":
     unittest.main()
