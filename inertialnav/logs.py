@@ -5,6 +5,7 @@ no header or footer. Parsing is structural; use validate_state_data for physical
 sanity checks. This module does not depend on the reference filter package.
 """
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Tuple, Union
@@ -67,3 +68,47 @@ def read_state_data(path: Union[str, Path]) -> List[StateSample]:
     """Read a UTF-8 state log; missing/unreadable paths raise OSError."""
     with open(path, encoding="utf-8") as stream:
         return parse_state_data(stream)
+
+
+@dataclass(frozen=True)
+class LogSummary:
+    sample_count: int
+    state_count: int
+    start_time: float
+    end_time: float
+    max_quaternion_norm_error: float
+
+
+def validate_state_data(samples: Iterable[StateSample], *,
+                        quaternion_tolerance: float = 1e-3) -> LogSummary:
+    """Require finite states, strictly increasing time and a near-unit quaternion.
+
+    The absolute norm tolerance is a sanity check, not an attitude accuracy
+    threshold. No normalization, sorting, interpolation or silent repair occurs.
+    A single sample is valid but says nothing about time progression.
+    """
+    if not math.isfinite(quaternion_tolerance) or quaternion_tolerance < 0:
+        raise ValueError("quaternion_tolerance must be finite and nonnegative")
+    count = 0
+    start = previous = None
+    max_error = 0.0
+    for count, sample in enumerate(samples, 1):
+        label = "line %d" % (sample.line_number or count)
+        if len(sample.states) != STATE_COUNT:
+            raise LogValidationError(label + ": expected 22 states")
+        if not all(math.isfinite(value) for value in (sample.time,) + tuple(sample.states)):
+            raise LogValidationError(label + ": time and all states must be finite")
+        if previous is not None and sample.time <= previous:
+            raise LogValidationError(label + ": time must be strictly increasing")
+        error = abs(math.hypot(*sample.quaternion) - 1.0)
+        if error > quaternion_tolerance:
+            raise LogValidationError(label + ": quaternion norm error %.9g exceeds %.9g"
+                                     % (error, quaternion_tolerance))
+        max_error = max(max_error, error)
+        if start is None:
+            start = sample.time
+        previous = sample.time
+    if count == 0:
+        raise LogValidationError("state log is empty")
+    assert start is not None and previous is not None
+    return LogSummary(count, STATE_COUNT, start, previous, max_error)

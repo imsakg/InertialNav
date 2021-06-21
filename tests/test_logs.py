@@ -49,3 +49,46 @@ class StateReaderTests(unittest.TestCase):
             self.assertEqual(logs.read_state_data(path)[0].time, 0.0)
             with self.assertRaises(OSError):
                 logs.read_state_data(Path(tmp) / "missing")
+
+
+class StateValidationTests(unittest.TestCase):
+    def validate(self, text, **kwargs):
+        return logs.validate_state_data(logs.parse_state_data(io.StringIO(text)), **kwargs)
+
+    def test_summary_counts_every_sample_and_bounds_quaternion_norm_error(self):
+        q = [1.0002] + [0.0] * 21
+        summary = self.validate(state_line(4) + state_line(5, q) + state_line(6))
+        self.assertEqual(summary.sample_count, 3)
+        self.assertEqual(summary.state_count, 22)
+        self.assertEqual((summary.start_time, summary.end_time), (4, 6))
+        self.assertAlmostEqual(summary.max_quaternion_norm_error, 0.0002)
+
+    def test_empty_and_wrong_state_count_are_errors_for_direct_callers(self):
+        for samples in [[], [logs.StateSample(0, (1, 0, 0, 0))]]:
+            with self.subTest(samples=samples), self.assertRaises(logs.LogValidationError):
+                logs.validate_state_data(samples)
+
+    def test_nonfinite_time_and_each_state_are_rejected(self):
+        for value in [float("nan"), float("inf"), -float("inf")]:
+            with self.subTest(value=value), self.assertRaisesRegex(logs.LogValidationError, "finite"):
+                self.validate(state_line(value))
+            for axis in range(22):
+                states = [1.0] + [0.0] * 21
+                states[axis] = value
+                with self.subTest(value=value, axis=axis), self.assertRaisesRegex(logs.LogValidationError, "finite"):
+                    self.validate(state_line(0, states))
+
+    def test_duplicate_and_decreasing_times_report_the_row(self):
+        for time in [1.0, 0.5]:
+            with self.subTest(time=time), self.assertRaisesRegex(logs.LogValidationError, "line 2.*strictly increasing"):
+                self.validate(state_line(1) + state_line(time))
+
+    def test_quaternion_check_uses_norm_and_configurable_tolerance(self):
+        for q in [0.0, 2.0, 1.0011, 1e308]:
+            with self.subTest(q=q), self.assertRaisesRegex(logs.LogValidationError, "quaternion"):
+                self.validate(state_line(0, [q] + [0.0] * 21))
+        self.validate(state_line(0, [-1] + [0] * 21))
+        self.validate(state_line(0, [1.01] + [0] * 21), quaternion_tolerance=0.02)
+        for tolerance in [-1, float("nan"), float("inf")]:
+            with self.subTest(tolerance=tolerance), self.assertRaises(ValueError):
+                self.validate(state_line(), quaternion_tolerance=tolerance)
