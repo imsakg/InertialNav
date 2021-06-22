@@ -92,3 +92,69 @@ class StateValidationTests(unittest.TestCase):
         for tolerance in [-1, float("nan"), float("inf")]:
             with self.subTest(tolerance=tolerance), self.assertRaises(ValueError):
                 self.validate(state_line(), quaternion_tolerance=tolerance)
+
+
+class ValidatorCliTests(unittest.TestCase):
+    def run_cli(self, *args, cwd=None, script=None):
+        import subprocess
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        script = script or root / "code" / "validate_output.py"
+        return subprocess.run([sys.executable, "-S", str(script)] + list(args),
+                              cwd=str(cwd or root), capture_output=True, text=True)
+
+    def test_valid_file_reports_real_count_and_no_accuracy_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "states.txt"
+            path.write_text(state_line(0) + state_line(1) + state_line(2))
+            result = self.run_cli(str(path), "--expected-rows", "3")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("samples=3", result.stdout)
+            self.assertIn("states=22", result.stdout)
+            self.assertIn("not an accuracy assessment", result.stdout)
+            mismatch = self.run_cli(str(path), "--expected-rows", "4")
+            self.assertNotEqual(mismatch.returncode, 0)
+            self.assertIn("expected 4 samples, got 3", mismatch.stderr)
+
+    def test_bad_missing_and_empty_logs_exit_nonzero_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "states.txt"
+            for text in ["", "0 1", state_line(0) + state_line(0),
+                         state_line(float("nan")), state_line(0, [2] + [0] * 21)]:
+                path.write_text(text)
+                result = self.run_cli(str(path))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("validation failed", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn("PASS", result.stdout)
+            result = self.run_cli(str(Path(tmp) / "missing"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("validation failed", result.stderr)
+
+    def test_legacy_default_from_root_and_code_directory(self):
+        import shutil
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_root = Path(tmp)
+            (fake_root / "code").mkdir()
+            (fake_root / "inertialnav").mkdir()
+            shutil.copy(root / "code" / "validate_output.py", fake_root / "code")
+            shutil.copy(root / "inertialnav" / "__init__.py", fake_root / "inertialnav")
+            shutil.copy(root / "inertialnav" / "logs.py", fake_root / "inertialnav")
+            (fake_root / "code" / "StateDataOut.txt").write_text(state_line())
+            (fake_root / "StateDataOut.txt").write_text("bad")
+            for cwd in [fake_root, fake_root / "code"]:
+                result = self.run_cli(cwd=cwd, script=fake_root / "code" / "validate_output.py")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("samples=1", result.stdout)
+
+    def test_explicit_relative_path_is_relative_to_working_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "local.txt").write_text(state_line())
+            result = self.run_cli("local.txt", cwd=Path(tmp))
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_invalid_options_fail(self):
+        for args in [("--quaternion-tolerance", "nan"), ("--expected-rows", "0")]:
+            result = self.run_cli(*args)
+            self.assertNotEqual(result.returncode, 0)
