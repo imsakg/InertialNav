@@ -24,3 +24,27 @@ class RmsErrorTests(unittest.TestCase):
                                  ([1], [float("nan")])]:
             with self.subTest(estimates=estimates), self.assertRaises(ValueError):
                 analysis.rmse(estimates, truth)
+
+
+class TrajectorySummaryTests(unittest.TestCase):
+    def test_axis_bias_rmse_max_and_vector_rms(self):
+        result = analysis.error_summary([[1, -2, 2], [3, 2, -2]], [[0, 0, 0], [0, 0, 0]])
+        self.assertEqual(result.sample_count, 2)
+        self.assertEqual(tuple(axis.bias for axis in result.axes), (2, 0, 0))
+        self.assertAlmostEqual(result.axes[0].rmse, math.sqrt(5))
+        self.assertEqual(tuple(axis.max_absolute for axis in result.axes), (3, 2, 2))
+        self.assertAlmostEqual(result.vector_rmse, math.sqrt(13))
+
+    def test_arbitrary_dimension_and_large_finite_values(self):
+        result = analysis.error_summary(iter([[1e200], [1e200]]), iter([[0], [0]]))
+        self.assertEqual(len(result.axes), 1)
+        self.assertAlmostEqual(result.axes[0].bias / 1e200, 1)
+        self.assertAlmostEqual(result.vector_rmse / 1e200, 1)
+
+    def test_rejects_empty_ragged_mismatched_and_nonfinite_trajectories(self):
+        cases = [([], []), ([[]], [[]]), ([[1]], [[1], [2]]),
+                 ([[1, 2], [3]], [[0, 0], [0, 0]]), ([[1]], [[1, 2]]),
+                 ([[float("inf")]], [[0]]), ([[1e308]], [[-1e308]])]
+        for estimated, truth in cases:
+            with self.subTest(estimated=estimated), self.assertRaises(ValueError):
+                analysis.error_summary(estimated, truth)
