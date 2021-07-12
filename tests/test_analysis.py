@@ -48,3 +48,37 @@ class TrajectorySummaryTests(unittest.TestCase):
         for estimated, truth in cases:
             with self.subTest(estimated=estimated), self.assertRaises(ValueError):
                 analysis.error_summary(estimated, truth)
+
+
+class RunningMomentsTests(unittest.TestCase):
+    def test_large_offset_variance_and_online_counts(self):
+        moments = analysis.RunningMoments()
+        for index in range(1, 6):
+            self.assertIs(moments.update(1e12 + index), moments)
+            self.assertEqual(moments.count, index)
+        self.assertEqual(moments.mean, 1e12 + 3)
+        self.assertAlmostEqual(moments.variance(), 2)
+        self.assertAlmostEqual(moments.variance(sample=True), 2.5)
+        self.assertAlmostEqual(moments.standard_deviation(), math.sqrt(2))
+
+    def test_empty_singleton_and_finite_guards(self):
+        moments = analysis.RunningMoments()
+        with self.assertRaises(ValueError):
+            _ = moments.mean
+        with self.assertRaises(ValueError):
+            moments.variance()
+        moments.update(7)
+        self.assertEqual(moments.variance(), 0)
+        with self.assertRaises(ValueError):
+            moments.variance(sample=True)
+        for value in [float("nan"), float("inf"), -float("inf")]:
+            with self.assertRaises(ValueError):
+                moments.update(value)
+            self.assertEqual((moments.count, moments.mean, moments.variance()), (1, 7, 0))
+
+    def test_overflowing_update_leaves_the_accumulator_unchanged(self):
+        moments = analysis.RunningMoments()
+        moments.update(1e308)
+        with self.assertRaises(ValueError):
+            moments.update(-1e308)
+        self.assertEqual((moments.count, moments.mean, moments.variance()), (1, 1e308, 0))

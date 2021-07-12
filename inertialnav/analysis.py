@@ -78,3 +78,46 @@ def error_summary(estimated, reference) -> TrajectoryErrorSummary:
     if not math.isfinite(vector_rmse):
         raise ValueError("vector RMSE exceeds floating-point range")
     return TrajectoryErrorSummary(count, axes, vector_rmse)
+
+
+class RunningMoments:
+    """Welford scalar count/mean/variance in O(1) memory.
+
+    Finite updates that overflow the accumulator are rejected atomically.
+    Variance defaults to population variance; sample=True uses n-1.
+    """
+
+    def __init__(self):
+        self._count = 0
+        self._mean = 0.0
+        self._m2 = 0.0
+
+    @property
+    def count(self) -> int:
+        return self._count
+
+    @property
+    def mean(self) -> float:
+        if not self._count:
+            raise ValueError("mean requires at least one sample")
+        return self._mean
+
+    def update(self, value: float):
+        value = _finite_values((value,), "value")[0]
+        count = self._count + 1
+        delta = value - self._mean
+        mean = self._mean + delta / count
+        m2 = self._m2 + delta * (value - mean)
+        if not all(math.isfinite(v) for v in (mean, m2)):
+            raise ValueError("running moments exceed floating-point range")
+        self._count, self._mean, self._m2 = count, mean, m2
+        return self
+
+    def variance(self, *, sample: bool = False) -> float:
+        divisor = self._count - int(sample)
+        if divisor <= 0:
+            raise ValueError("insufficient samples for variance")
+        return self._m2 / divisor
+
+    def standard_deviation(self, *, sample: bool = False) -> float:
+        return math.sqrt(self.variance(sample=sample))
