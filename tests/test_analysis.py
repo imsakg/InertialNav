@@ -82,3 +82,30 @@ class RunningMomentsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             moments.update(-1e308)
         self.assertEqual((moments.count, moments.mean, moments.variance()), (1, 1e308, 0))
+
+
+class InterpolationTests(unittest.TestCase):
+    def test_exact_endpoints_irregular_spacing_and_singleton(self):
+        self.assertEqual(analysis.interpolate([0, 1, 4], [0, 2, 8], 2.5), 5)
+        self.assertEqual(analysis.interpolate([0, 1], [2, 4], 0), 2)
+        self.assertEqual(analysis.interpolate([0, 1], [2, 4], 1), 4)
+        self.assertEqual(analysis.interpolate([1], [7], 1), 7)
+        self.assertEqual(analysis.interpolate([0, 1], [-1e308, 1e308], 0.5), 0)
+
+    def test_no_extrapolation_sorting_or_silent_truncation(self):
+        cases = [([], [], 0), ([0, 0], [1, 2], 0), ([1, 0], [1, 2], 0),
+                 ([0, 1], [1], 0), ([0, 1], [0, 1], -1), ([0, 1], [0, 1], 2),
+                 ([0], [1], 1), ([0, float("inf")], [0, 1], 0),
+                 ([0, 1], [float("nan"), 1], 0), ([0, 1], [0, 1], float("nan"))]
+        for times, values, query in cases:
+            with self.subTest(times=times, query=query), self.assertRaises(ValueError):
+                analysis.interpolate(times, values, query)
+
+    def test_max_gap_rejects_only_interpolated_large_gaps(self):
+        with self.assertRaises(ValueError):
+            analysis.interpolate([0, 10], [0, 20], 5, max_gap=2)
+        self.assertEqual(analysis.interpolate([0, 10], [0, 20], 10, max_gap=2), 20)
+        self.assertEqual(analysis.interpolate([0, 2], [0, 4], 1, max_gap=2), 2)
+        for gap in [0, -1, float("nan"), float("inf")]:
+            with self.subTest(gap=gap), self.assertRaises(ValueError):
+                analysis.interpolate([0, 1], [0, 1], 0.5, max_gap=gap)

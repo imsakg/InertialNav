@@ -5,6 +5,7 @@ No function here supplies ground truth or certifies estimator accuracy.
 """
 
 import math
+from bisect import bisect_left
 from dataclasses import dataclass
 from typing import Iterable, Tuple
 
@@ -121,3 +122,49 @@ class RunningMoments:
 
     def standard_deviation(self, *, sample: bool = False) -> float:
         return math.sqrt(self.variance(sample=sample))
+
+
+def _time_axis(times, name="times"):
+    times = _finite_values(times, name)
+    if any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError(name + " must be strictly increasing")
+    return times
+
+
+def _check_gap(max_gap):
+    if max_gap is not None:
+        max_gap = _finite_values((max_gap,), "max_gap")[0]
+        if max_gap <= 0:
+            raise ValueError("max_gap must be positive")
+    return max_gap
+
+
+def _bracket(times, query, max_gap):
+    if query < times[0] or query > times[-1]:
+        raise ValueError("query is outside the reference time range")
+    right = bisect_left(times, query)
+    if times[right] == query:
+        return right, right, 0.0
+    left = right - 1
+    width = times[right] - times[left]
+    if not math.isfinite(width):
+        raise ValueError("time interval exceeds floating-point range")
+    if max_gap is not None and width > max_gap:
+        raise ValueError("interpolation interval exceeds max_gap")
+    return left, right, (query - times[left]) / width
+
+
+def interpolate(times: Iterable[float], values: Iterable[float], query_time: float,
+                *, max_gap=None) -> float:
+    """Piecewise linear scalar interpolation, with no extrapolation or sorting.
+
+    Exact samples (including singleton timelines) require no interpolation.
+    max_gap optionally bounds the bracketing interval, in the time axis's units.
+    """
+    times = _time_axis(times)
+    values = _finite_values(values, "values")
+    if len(times) != len(values):
+        raise ValueError("times and values lengths must match")
+    query = _finite_values((query_time,), "query_time")[0]
+    left, right, weight = _bracket(times, query, _check_gap(max_gap))
+    return (1 - weight) * values[left] + weight * values[right]
