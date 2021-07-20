@@ -109,3 +109,29 @@ class InterpolationTests(unittest.TestCase):
         for gap in [0, -1, float("nan"), float("inf")]:
             with self.subTest(gap=gap), self.assertRaises(ValueError):
                 analysis.interpolate([0, 1], [0, 1], 0.5, max_gap=gap)
+
+
+class TimelineAlignmentTests(unittest.TestCase):
+    def test_aligns_vector_reference_at_estimate_times_with_explicit_overlap(self):
+        aligned = analysis.align_trajectories(
+            [-1, 0, 1, 2, 3], [[-1, -2], [0, 0], [1, 2], [2, 4], [3, 6]],
+            [0, 2], [[0, 0], [2, 4]])
+        self.assertEqual(aligned.times, (0, 1, 2))
+        self.assertEqual(aligned.estimated, aligned.reference)
+        self.assertEqual(aligned.dropped_estimates, 2)
+        self.assertEqual(analysis.error_summary(aligned.estimated, aligned.reference).vector_rmse, 0)
+
+    def test_single_exact_overlap_and_gap_rejection(self):
+        aligned = analysis.align_trajectories([1], [[2]], [1], [[3]])
+        self.assertEqual(aligned.reference, ((3,),))
+        with self.assertRaisesRegex(ValueError, "max_gap"):
+            analysis.align_trajectories([1], [[2]], [0, 10], [[0], [10]], max_gap=2)
+
+    def test_rejects_invalid_timelines_dimensions_and_no_overlap(self):
+        cases = [([], [], [0], [[0]]), ([1, 1], [[0], [1]], [0, 2], [[0], [2]]),
+                 ([0], [[0]], [1], [[1]]), ([0, 1], [[0]], [0], [[0]]),
+                 ([0], [[0, 1]], [0], [[0]]), ([0], [[0]], [0, 1], [[0], [1, 2]]),
+                 ([0], [[float("nan")]], [0], [[0]])]
+        for args in cases:
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                analysis.align_trajectories(*args)

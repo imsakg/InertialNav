@@ -168,3 +168,45 @@ def interpolate(times: Iterable[float], values: Iterable[float], query_time: flo
     query = _finite_values((query_time,), "query_time")[0]
     left, right, weight = _bracket(times, query, _check_gap(max_gap))
     return (1 - weight) * values[left] + weight * values[right]
+
+
+@dataclass(frozen=True)
+class AlignedTrajectory:
+    times: Tuple[float, ...]
+    estimated: Tuple[Tuple[float, ...], ...]
+    reference: Tuple[Tuple[float, ...], ...]
+    dropped_estimates: int
+
+
+def align_trajectories(estimate_times, estimated, reference_times, reference,
+                       *, max_gap=None) -> AlignedTrajectory:
+    """Interpolate a vector reference at estimate times inside its time range.
+
+    Out-of-range estimates are counted as dropped, never extrapolated. Invalid
+    timelines or interpolation gaps fail the whole call, rather than silently
+    selecting an easier subset. Clocks, units and frames must already agree.
+    This is componentwise interpolation, not quaternion/angle interpolation.
+    """
+    et = _time_axis(estimate_times, "estimate_times")
+    rt = _time_axis(reference_times, "reference_times")
+    estimates = _trajectory(estimated, "estimated")
+    truth = _trajectory(reference, "reference")
+    if len(et) != len(estimates) or len(rt) != len(truth):
+        raise ValueError("each timeline must match its trajectory length")
+    if len(estimates[0]) != len(truth[0]):
+        raise ValueError("trajectory dimensions must match")
+    max_gap = _check_gap(max_gap)
+    times, paired_estimates, paired_truth = [], [], []
+    for time, estimate in zip(et, estimates):
+        if time < rt[0] or time > rt[-1]:
+            continue
+        left, right, weight = _bracket(rt, time, max_gap)
+        target = _finite_values(((1 - weight) * a + weight * b
+                                 for a, b in zip(truth[left], truth[right])), "interpolated reference")
+        times.append(time)
+        paired_estimates.append(estimate)
+        paired_truth.append(target)
+    if not times:
+        raise ValueError("timelines have no estimate samples in common")
+    return AlignedTrajectory(tuple(times), tuple(paired_estimates), tuple(paired_truth),
+                             len(et) - len(times))
