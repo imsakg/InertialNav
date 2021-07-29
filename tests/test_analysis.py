@@ -135,3 +135,19 @@ class TimelineAlignmentTests(unittest.TestCase):
         for args in cases:
             with self.subTest(args=args), self.assertRaises(ValueError):
                 analysis.align_trajectories(*args)
+
+
+class InnovationScoreTests(unittest.TestCase):
+    def test_diagonal_nis_known_scalar_and_vector_answers(self):
+        self.assertAlmostEqual(analysis.nis([2, -3], [4, 9]), 2)
+        self.assertAlmostEqual(analysis.nis([2], [4]), 1)
+        self.assertEqual(analysis.nis([0, 0], [1, 2]), 0)
+        self.assertAlmostEqual(analysis.nis([1e200], [1e300]) / 1e100, 1)
+
+    def test_nis_rejects_invalid_variance_shapes_nonfinite_and_overflow(self):
+        cases = [([], []), ([1], [0]), ([1], [-1]), ([1], [1, 2]),
+                 ([1], [float("nan")]), ([float("inf")], [1]),
+                 ([1e308], [1e-308]), ([1, 2], [[1, 0], [0, 1]])]
+        for innovations, variances in cases:
+            with self.subTest(innovations=innovations, variances=variances), self.assertRaises(ValueError):
+                analysis.nis(innovations, variances)

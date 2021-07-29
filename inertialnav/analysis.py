@@ -210,3 +210,27 @@ def align_trajectories(estimate_times, estimated, reference_times, reference,
         raise ValueError("timelines have no estimate samples in common")
     return AlignedTrajectory(tuple(times), tuple(paired_estimates), tuple(paired_truth),
                              len(et) - len(times))
+
+
+def _squared_norm(values, name):
+    norm = math.hypot(*values)
+    score = norm * norm
+    if not math.isfinite(score):
+        raise ValueError(name + " exceeds floating-point range")
+    return score
+
+
+def nis(innovation: Iterable[float], variances: Iterable[float]) -> float:
+    """Normalized innovation squared for independent/diagonal innovations.
+
+    Return sum(innovation[i]**2 / variances[i]). The C++ VelPosFuse/MagFuse
+    logs contain scalar variances, not full innovation covariances. Do not use
+    this diagonal approximation for correlated components without justification.
+    """
+    innovation = _finite_values(innovation, "innovation")
+    variances = _finite_values(variances, "variances")
+    if len(innovation) != len(variances):
+        raise ValueError("innovation and variances lengths must match")
+    if any(variance <= 0 for variance in variances):
+        raise ValueError("innovation variances must be positive")
+    return _squared_norm((v / math.sqrt(s) for v, s in zip(innovation, variances)), "NIS")
