@@ -151,3 +151,27 @@ class InnovationScoreTests(unittest.TestCase):
         for innovations, variances in cases:
             with self.subTest(innovations=innovations, variances=variances), self.assertRaises(ValueError):
                 analysis.nis(innovations, variances)
+
+
+class NeesTests(unittest.TestCase):
+    def test_full_correlated_covariance_has_analytical_answer(self):
+        covariance = [[2.0, 1.0], [1.0, 2.0]]
+        self.assertAlmostEqual(analysis.nees([1, 1], covariance), 2 / 3)
+        self.assertAlmostEqual(analysis.nees([1, -1], covariance), 2)
+        self.assertEqual(covariance, [[2.0, 1.0], [1.0, 2.0]])
+        self.assertEqual(analysis.nees([0, 0], covariance), 0)
+
+    def test_diagonal_agrees_with_nis_and_survives_widely_scaled_units(self):
+        self.assertAlmostEqual(analysis.nees([2, -3], [[4, 0], [0, 9]]), analysis.nis([2, -3], [4, 9]))
+        self.assertAlmostEqual(analysis.nees([1e-150, 2e150], [[1e-300, 0], [0, 4e300]]), 2)
+
+    def test_rejects_bad_shapes_asymmetry_singular_indefinite_and_nonfinite(self):
+        cases = [([], []), ([1], [[1, 0]]), ([1, 2], [[1]]),
+                 ([1, 2], [[1, 0], [0.1, 1]]), ([1, 2], [[1, 1], [1, 1]]),
+                 ([1, 2], [[1, 2], [2, 1]]), ([1], [[0]]), ([1], [[-1]]),
+                 ([1], [[float("inf")]]), ([float("nan")], [[1]]),
+                 ([1e308], [[1e-308]]),
+                 ([1, 1], [[1e-30, 0], [1e-31, 1e-30]])]
+        for errors, covariance in cases:
+            with self.subTest(covariance=covariance), self.assertRaises(ValueError):
+                analysis.nees(errors, covariance)

@@ -234,3 +234,44 @@ def nis(innovation: Iterable[float], variances: Iterable[float]) -> float:
     if any(variance <= 0 for variance in variances):
         raise ValueError("innovation variances must be positive")
     return _squared_norm((v / math.sqrt(s) for v, s in zip(innovation, variances)), "NIS")
+
+
+def nees(error: Iterable[float], covariance) -> float:
+    """Return error.T @ covariance^-1 @ error using scaled Cholesky solves.
+
+    Require a finite symmetric positive-definite full covariance in the error
+    vector's coordinates. Symmetry uses a 1e-12 relative tolerance (no absolute
+    floor); the lower triangle is factored. Singular/indefinite matrices are not
+    regularized. Extremely ill-conditioned matrices may fail at float precision.
+    This quadratic form also applies to a full innovation covariance for NIS.
+    """
+    error = _finite_values(error, "error")
+    matrix = _trajectory(covariance, "covariance")
+    n = len(error)
+    if len(matrix) != n or len(matrix[0]) != n:
+        raise ValueError("covariance must be square and match the error dimension")
+    for i in range(n):
+        if matrix[i][i] <= 0:
+            raise ValueError("covariance must be positive definite")
+        for j in range(i):
+            if not math.isclose(matrix[i][j], matrix[j][i], rel_tol=1e-12, abs_tol=0):
+                raise ValueError("covariance must be symmetric")
+    scales = tuple(math.sqrt(matrix[i][i]) for i in range(n))
+    lower = [[0.0] * n for _ in range(n)]
+    whitened = []
+    try:
+        for i in range(n):
+            for j in range(i + 1):
+                correlation = (matrix[i][j] / scales[i]) / scales[j]
+                pivot = correlation - math.fsum(lower[i][k] * lower[j][k] for k in range(j))
+                if not math.isfinite(pivot) or (i == j and pivot <= 0):
+                    raise ValueError("covariance must be positive definite")
+                lower[i][j] = math.sqrt(pivot) if i == j else pivot / lower[j][j]
+            residual = error[i] / scales[i] - math.fsum(lower[i][j] * whitened[j] for j in range(i))
+            value = residual / lower[i][i]
+            if not math.isfinite(value):
+                raise ValueError("NEES solve exceeds floating-point range")
+            whitened.append(value)
+    except OverflowError as exc:
+        raise ValueError("NEES solve exceeds floating-point range") from exc
+    return _squared_norm(whitened, "NEES")
