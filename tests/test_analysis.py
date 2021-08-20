@@ -175,3 +175,20 @@ class NeesTests(unittest.TestCase):
         for errors, covariance in cases:
             with self.subTest(covariance=covariance), self.assertRaises(ValueError):
                 analysis.nees(errors, covariance)
+
+
+class AutocorrelationTests(unittest.TestCase):
+    def test_biased_normalized_acf_for_alternating_innovations(self):
+        expected = (1.0, -0.75, 0.5, -0.25)
+        self.assertEqual(analysis.autocorrelation([1, -1, 1, -1], 3), expected)
+        for actual, target in zip(analysis.autocorrelation([1e12 + 1, 1e12 - 1] * 2, 3), expected):
+            self.assertAlmostEqual(actual, target)
+        self.assertEqual(analysis.autocorrelation([1e308, -1e308], 1), (1.0, -0.5))
+
+    def test_bad_lags_constant_sequences_and_nonfinite_values_fail(self):
+        for values in [[], [1], [2, 2], [float("nan"), 1]]:
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                analysis.autocorrelation(values, 0)
+        for lag in [-1, 3, 0.5, True]:
+            with self.subTest(lag=lag), self.assertRaises(ValueError):
+                analysis.autocorrelation([1, 2, 3], lag)

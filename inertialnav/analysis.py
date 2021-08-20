@@ -275,3 +275,31 @@ def nees(error: Iterable[float], covariance) -> float:
     except OverflowError as exc:
         raise ValueError("NEES solve exceeds floating-point range") from exc
     return _squared_norm(whitened, "NEES")
+
+
+def autocorrelation(innovations: Iterable[float], max_lag: int) -> Tuple[float, ...]:
+    """Demeaned, biased, normalized scalar ACF at lags 0..max_lag.
+
+    rho[k] = sum((x[i]-mean)*(x[i+k]-mean)) / sum((x[i]-mean)**2).
+    The denominator is shared across lags; no n/(n-k) correction is applied.
+    Constant sequences have undefined ACF and raise ValueError. Lags are sample
+    offsets: uniform sampling is the caller's responsibility.
+    """
+    values = _finite_values(innovations, "innovations")
+    n = len(values)
+    if isinstance(max_lag, bool) or not isinstance(max_lag, int) or not 0 <= max_lag < n:
+        raise ValueError("max_lag must be an integer from 0 through n-1")
+    mean = math.fsum(value / n for value in values)
+    centered = tuple(value - mean for value in values)
+    if not all(math.isfinite(value) for value in centered):
+        scale = max(abs(value) for value in values)
+        normalized = tuple(value / scale for value in values)
+        mean = math.fsum(value / n for value in normalized)
+        centered = tuple(value - mean for value in normalized)
+    scale = max(abs(value) for value in centered)
+    if scale == 0:
+        raise ValueError("autocorrelation is undefined for a constant sequence")
+    centered = tuple(value / scale for value in centered)
+    denominator = math.fsum(value * value for value in centered)
+    return tuple(math.fsum(centered[i] * centered[i + lag] for i in range(n - lag)) / denominator
+                 for lag in range(max_lag + 1))
