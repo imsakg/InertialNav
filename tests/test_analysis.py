@@ -192,3 +192,38 @@ class AutocorrelationTests(unittest.TestCase):
         for lag in [-1, 3, 0.5, True]:
             with self.subTest(lag=lag), self.assertRaises(ValueError):
                 analysis.autocorrelation([1, 2, 3], lag)
+
+
+class AllanDeviationTests(unittest.TestCase):
+    def test_rate_ramp_has_known_deviation_and_exact_pair_counts(self):
+        points = analysis.overlapping_allan_deviation([0, 1, 2, 3], 0.5, [1, 2])
+        self.assertEqual(tuple(p.cluster_size for p in points), (1, 2))
+        self.assertEqual(tuple(p.tau for p in points), (0.5, 1.0))
+        self.assertEqual(tuple(p.pair_count for p in points), (3, 1))
+        self.assertAlmostEqual(points[0].deviation, 1 / math.sqrt(2))
+        self.assertAlmostEqual(points[1].deviation, math.sqrt(2))
+
+    def test_overlapping_windows_match_direct_averages(self):
+        values = [1, 2, 4, 8, 16, 32, 64]
+        for point in analysis.overlapping_allan_deviation(values, 1, [1, 2, 3]):
+            m = point.cluster_size
+            differences = [math.fsum(values[i + m:i + 2 * m]) / m - math.fsum(values[i:i + m]) / m
+                           for i in range(len(values) - 2 * m + 1)]
+            expected = math.sqrt(math.fsum(v * v for v in differences) / (2 * len(differences)))
+            self.assertAlmostEqual(point.deviation, expected)
+            self.assertEqual(point.pair_count, len(differences))
+        constant = analysis.overlapping_allan_deviation([7] * 8, 1, [1, 2, 4])
+        self.assertEqual(tuple(p.deviation for p in constant), (0, 0, 0))
+        offset = analysis.overlapping_allan_deviation([1e12 + i for i in range(4)], 1, [2])
+        self.assertAlmostEqual(offset[0].deviation, math.sqrt(2))
+
+    def test_rejects_nonfinite_samples_intervals_and_invalid_cluster_sizes(self):
+        for values, interval, clusters in [([], 1, [1]), ([0], 1, [1]),
+                ([0, float("inf")], 1, [1]), ([0, 1], 0, [1]),
+                ([0, 1], float("nan"), [1]), ([0, 1], -1, [1]),
+                ([0, 1], 1, []), ([0, 1], 1, [0]), ([0, 1], 1, [2]),
+                ([0, 1], 1, [True]), ([0, 1], 1, [1.5]),
+                ([0] * 4, 1, [2, 1]), ([0] * 4, 1, [1, 1]),
+                ([0] * 4, 1e308, [2])]:
+            with self.subTest(interval=interval, clusters=clusters), self.assertRaises(ValueError):
+                analysis.overlapping_allan_deviation(values, interval, clusters)

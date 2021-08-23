@@ -303,3 +303,58 @@ def autocorrelation(innovations: Iterable[float], max_lag: int) -> Tuple[float, 
     denominator = math.fsum(value * value for value in centered)
     return tuple(math.fsum(centered[i] * centered[i + lag] for i in range(n - lag)) / denominator
                  for lag in range(max_lag + 1))
+
+
+@dataclass(frozen=True)
+class AllanPoint:
+    cluster_size: int
+    tau: float
+    deviation: float
+    pair_count: int
+
+
+def overlapping_allan_deviation(rate_samples: Iterable[float], sample_interval: float,
+                                cluster_sizes: Iterable[int]) -> Tuple[AllanPoint, ...]:
+    """Overlapping Allan deviation of uniformly spaced scalar rate samples.
+
+    For m-sample means, use all n-2*m+1 pairs of adjacent m-sample windows,
+    with variance = mean((second_mean-first_mean)**2)/2. tau=m*sample_interval.
+    This is the rate/frequency convention, NOT the phase-data second-difference
+    convention. Missing/irregular timing must be handled before calling.
+    """
+    values = _finite_values(rate_samples, "rate_samples")
+    interval = _finite_values((sample_interval,), "sample_interval")[0]
+    if interval <= 0:
+        raise ValueError("sample_interval must be positive")
+    clusters = tuple(cluster_sizes)
+    if not clusters:
+        raise ValueError("cluster_sizes must be nonempty")
+    previous = 0
+    for m in clusters:
+        if isinstance(m, bool) or not isinstance(m, int) or not previous < m <= len(values) // 2:
+            raise ValueError("cluster_sizes must be strictly increasing integers from 1 through n//2")
+        if not math.isfinite(m * interval):
+            raise ValueError("averaging time exceeds floating-point range")
+        previous = m
+    shifted = tuple(value - values[0] for value in values)
+    if not all(math.isfinite(value) for value in shifted):
+        shifted = values
+    scale = max(abs(value) for value in shifted)
+    prefix = [0.0]
+    total = correction = 0.0
+    for value in shifted:
+        increment = (value / scale if scale else 0.0) - correction
+        next_total = total + increment
+        correction = (next_total - total) - increment
+        total = next_total
+        prefix.append(total)
+    points = []
+    for m in clusters:
+        pairs = len(values) - 2 * m + 1
+        differences = (((prefix[i + 2 * m] - prefix[i + m])
+                        - (prefix[i + m] - prefix[i])) / m for i in range(pairs))
+        deviation = (rms(differences) / math.sqrt(2)) * scale
+        if not math.isfinite(deviation):
+            raise ValueError("Allan deviation exceeds floating-point range")
+        points.append(AllanPoint(m, m * interval, deviation, pairs))
+    return tuple(points)
