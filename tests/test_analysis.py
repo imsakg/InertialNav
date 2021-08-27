@@ -227,3 +227,31 @@ class AllanDeviationTests(unittest.TestCase):
                 ([0] * 4, 1e308, [2])]:
             with self.subTest(interval=interval, clusters=clusters), self.assertRaises(ValueError):
                 analysis.overlapping_allan_deviation(values, interval, clusters)
+
+
+class WrappedAngleErrorTests(unittest.TestCase):
+    def test_shortest_signed_error_and_half_open_tie_convention(self):
+        self.assertEqual(analysis.wrapped_angle_error(-179, 179, period=360), 2)
+        self.assertEqual(analysis.wrapped_angle_error(179, -179, period=360), -2)
+        self.assertEqual(analysis.wrapped_angle_error(180, 0, period=360), -180)
+        self.assertEqual(analysis.wrapped_angle_error(-180, 0, period=360), -180)
+        self.assertEqual(analysis.wrapped_angle_error(720, 0, period=360), 0)
+        self.assertAlmostEqual(analysis.wrapped_angle_error(math.pi, 0), -math.pi)
+
+    def test_paired_wrapping_and_rms(self):
+        errors = analysis.wrapped_angle_errors([-179, 179], [179, -179], period=360)
+        self.assertEqual(errors, (2, -2))
+        self.assertEqual(analysis.rms(errors), 2)
+        large = analysis.wrapped_angle_error(1e308, -1e308)
+        self.assertTrue(math.isfinite(large))
+        self.assertTrue(-math.pi <= large < math.pi)
+
+    def test_rejects_nonfinite_angles_invalid_period_and_mismatched_series(self):
+        for estimate, truth, period in [(float("nan"), 0, 360), (0, float("inf"), 360),
+                                       (0, 0, 0), (0, 0, -1), (0, 0, float("inf")),
+                                       (0, 0, float("nan")), (0, 0, 5e-324)]:
+            with self.subTest(period=period), self.assertRaises(ValueError):
+                analysis.wrapped_angle_error(estimate, truth, period=period)
+        for estimated, truth in [([], []), ([1], [1, 2]), ([1], [float("nan")])]:
+            with self.assertRaises(ValueError):
+                analysis.wrapped_angle_errors(estimated, truth)

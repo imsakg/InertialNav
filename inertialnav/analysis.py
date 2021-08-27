@@ -358,3 +358,32 @@ def overlapping_allan_deviation(rate_samples: Iterable[float], sample_interval: 
             raise ValueError("Allan deviation exceeds floating-point range")
         points.append(AllanPoint(m, m * interval, deviation, pairs))
     return tuple(points)
+
+
+def wrapped_angle_error(estimated: float, reference: float, *, period: float = 2 * math.pi) -> float:
+    """Shortest signed estimated-minus-reference error in [-period/2, period/2).
+
+    Radians are the default; use period=360 for degrees. Both half-turn ties map
+    to the negative endpoint. Reducing operands before subtraction avoids an
+    overflowing raw difference, but cannot recover precision lost in huge angles.
+    """
+    estimated, reference, period = _finite_values((estimated, reference, period), "angles and period")
+    half = period / 2
+    if period <= 0 or half == 0:
+        raise ValueError("period must be positive with a representable half-period")
+    difference = (estimated % period) - (reference % period)
+    if difference >= half:
+        difference -= period
+    elif difference < -half:
+        difference += period
+    return difference
+
+
+def wrapped_angle_errors(estimated: Iterable[float], reference: Iterable[float],
+                         *, period: float = 2 * math.pi) -> Tuple[float, ...]:
+    """Paired scalar angle errors; feed the result to rms for angular RMSE."""
+    estimates = _finite_values(estimated, "estimated")
+    truth = _finite_values(reference, "reference")
+    if len(estimates) != len(truth):
+        raise ValueError("angle series lengths must match")
+    return tuple(wrapped_angle_error(a, b, period=period) for a, b in zip(estimates, truth))
