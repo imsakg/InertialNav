@@ -158,3 +158,83 @@ class ValidatorCliTests(unittest.TestCase):
         for args in [("--quaternion-tolerance", "nan"), ("--expected-rows", "0")]:
             result = self.run_cli(*args)
             self.assertNotEqual(result.returncode, 0)
+
+
+class JsonValidationIntegrationTests(unittest.TestCase):
+    run_cli = ValidatorCliTests.run_cli
+
+    def test_json_report_agrees_with_reader_and_preserves_endpoints(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "StateDataOut.txt"
+            path.write_text(state_line(0) + state_line(0.01) + state_line(0.02))
+            result = self.run_cli(str(path), "--json", "--expected-rows", "3")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            summary = logs.validate_state_data(logs.read_state_data(path))
+            self.assertEqual(report["status"], "pass")
+            self.assertEqual(report["sample_count"], summary.sample_count)
+            self.assertEqual(report["state_count"], 22)
+            self.assertEqual((report["start_time"], report["end_time"]), (0, 0.02))
+            self.assertEqual(report["max_quaternion_norm_error"], 0)
+            self.assertIs(report["accuracy_assessed"], False)
+            self.assertEqual(result.stderr, "")
+
+    def test_json_failure_is_parseable_and_never_claims_accuracy(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "StateDataOut.txt"
+            for content in [state_line(0) + state_line(0), "", state_line(0, [0] * 22)]:
+                path.write_text(content)
+                result = self.run_cli(str(path), "--json")
+                self.assertNotEqual(result.returncode, 0)
+                report = json.loads(result.stdout)
+                self.assertEqual(report["status"], "fail")
+                self.assertIs(report["accuracy_assessed"], False)
+                self.assertTrue(report["error"])
+                self.assertNotIn("sample_count", report)
+
+    def test_decoding_failures_are_handled_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "StateDataOut.txt"
+            path.write_bytes(b"\xff\xfe")
+            result = self.run_cli(str(path))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("validation failed", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+
+class ArchivedStateRegressionTests(unittest.TestCase):
+    run_cli = ValidatorCliTests.run_cli
+
+    def test_archived_current_format_requires_explicit_startup_selection(self):
+        import json
+        from zipfile import ZipFile
+        root = Path(__file__).resolve().parents[1]
+        with ZipFile(root / "code" / "ValidationOutputData.zip") as archive:
+            text = archive.read("StateDataOut.txt").decode("utf-8")
+        rows = logs.parse_state_data(text.splitlines())
+        self.assertEqual(len(rows), 40471)
+        with self.assertRaisesRegex(logs.LogValidationError, "line 1: quaternion"):
+            logs.validate_state_data(rows)
+        selected = [row for row in rows if row.time >= 1.0]
+        self.assertEqual(len(rows) - len(selected), 50)
+        summary = logs.validate_state_data(selected)
+        self.assertEqual((summary.sample_count, summary.start_time, summary.end_time), (40421, 1.02, 847.904))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "explicitly-selected-after-1s.txt"
+            path.write_text("".join(line for line in text.splitlines(keepends=True)
+                                    if float(line.split()[0]) >= 1.0), encoding="utf-8")
+            result = self.run_cli(str(path), "--json", "--expected-rows", "40421")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["sample_count"], summary.sample_count)
+            self.assertIs(json.loads(result.stdout)["accuracy_assessed"], False)
+
+    def test_different_historical_archive_width_is_not_guessed(self):
+        from zipfile import ZipFile
+        root = Path(__file__).resolve().parents[1]
+        with ZipFile(root / "code" / "OutputFiles.zip") as archive:
+            with archive.open("StateDataOut.txt") as stream:
+                line = stream.readline().decode("utf-8")
+        with self.assertRaisesRegex(logs.LogValidationError, "expected 23.*got 25"):
+            logs.parse_state_data([line])

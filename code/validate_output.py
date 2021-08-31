@@ -2,6 +2,8 @@
 """Sanity-check real C++ state logs without NumPy or accuracy claims."""
 
 import argparse
+from dataclasses import asdict
+import json
 import math
 from pathlib import Path
 import sys
@@ -21,6 +23,8 @@ def main(argv=None):
                         help="maximum absolute quaternion norm error (default: 0.001)")
     parser.add_argument("--expected-rows", type=int,
                         help="optionally require this exact positive sample count")
+    parser.add_argument("--json", action="store_true",
+                        help="emit one JSON report to stdout, including on log failure")
     args = parser.parse_args(argv)
     if not math.isfinite(args.quaternion_tolerance) or args.quaternion_tolerance < 0:
         parser.error("--quaternion-tolerance must be finite and nonnegative")
@@ -33,8 +37,18 @@ def main(argv=None):
             raise LogValidationError("expected %d samples, got %d"
                                      % (args.expected_rows, summary.sample_count))
     except (OSError, UnicodeError, ValueError) as exc:
-        print("validation failed: %s: %s" % (args.path, exc), file=sys.stderr)
+        message = "validation failed: %s: %s" % (args.path, exc)
+        if args.json:
+            print(json.dumps({"status": "fail", "accuracy_assessed": False, "error": message},
+                             allow_nan=False))
+        else:
+            print(message, file=sys.stderr)
         return 1
+    if args.json:
+        report = asdict(summary)
+        report.update(status="pass", accuracy_assessed=False)
+        print(json.dumps(report, allow_nan=False, sort_keys=True))
+        return 0
     print("PASS: samples=%d states=%d time=[%.9g, %.9g] max_quaternion_norm_error=%.9g"
           % (summary.sample_count, summary.state_count, summary.start_time,
              summary.end_time, summary.max_quaternion_norm_error))

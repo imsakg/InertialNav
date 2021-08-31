@@ -255,3 +255,13 @@ class WrappedAngleErrorTests(unittest.TestCase):
         for estimated, truth in [([], []), ([1], [1, 2]), ([1], [float("nan")])]:
             with self.assertRaises(ValueError):
                 analysis.wrapped_angle_errors(estimated, truth)
+
+
+class DocumentationExamplesTests(unittest.TestCase):
+    def test_documented_examples_execute_on_the_public_apis(self):
+        import doctest
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "docs" / "analysis.md"
+        result = doctest.testfile(str(path), module_relative=False, verbose=False)
+        self.assertGreaterEqual(result.attempted, 20)
+        self.assertEqual(result.failed, 0)
