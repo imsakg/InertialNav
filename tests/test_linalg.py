@@ -23,4 +23,22 @@ class LinearAlgebraTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             la.matvec([[1, 2]], [1])
 
+class CovarianceTests(unittest.TestCase):
+    def test_cholesky_solution_and_semidefinite_covariance(self):
+        a = [[4, 2], [2, 3]]
+        for value in la.solve_spd(a, [6, 5]):
+            self.assertAlmostEqual(value, 1.0)
+        self.assertEqual(la.covariance([[0, 0], [0, 2]]), [[0, 0], [0, 2]])
+        for bad in ([[1, 2], [2, 1]], [[1, 1], [0, 1]], [[-1]], [[0, 1], [1, 2]]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                la.covariance(bad)
+        for bad in ([[0]], [[1, 1], [1, 1]]):
+            with self.assertRaises(ValueError):
+                la.solve_spd(bad, [1]*len(bad))
+        original = [[2, 0], [0, 1]]
+        copied = la.covariance(original)
+        copied[0][0] = 9
+        self.assertEqual(original[0][0], 2)
+
+
 # NEXT_INCREMENT

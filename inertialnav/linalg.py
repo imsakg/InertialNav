@@ -65,4 +65,58 @@ def outer(a, b):
     return matrix([[x*y for y in b] for x in a])
 
 
+def covariance(rows, size=None):
+    """Return a finite symmetric positive-semidefinite covariance copy."""
+    a = matrix(rows)
+    n = len(a)
+    if len(a[0]) != n or (size is not None and n != size):
+        raise ValueError("covariance must be square with the requested size")
+    scale = max(abs(value) for row in a for value in row)
+    tol = 1e-12*scale
+    for i in range(n):
+        for j in range(i):
+            if abs(a[i][j]-a[j][i]) > tol:
+                raise ValueError("covariance must be symmetric")
+            a[i][j] = a[j][i] = 0.5*a[i][j]+0.5*a[j][i]
+    # A rank-deficient covariance is valid; zero Cholesky pivots must
+    # have zero residual coupling to all later rows.
+    lower = [[0.0]*n for _ in range(n)]
+    for i in range(n):
+        for j in range(i+1):
+            residual = a[i][j]-math.fsum(lower[i][k]*lower[j][k] for k in range(j))
+            if i == j:
+                if residual < -tol:
+                    raise ValueError("covariance must be positive semidefinite")
+                lower[i][j] = math.sqrt(max(0.0, residual))
+            elif lower[j][j] > 0.0:
+                lower[i][j] = residual/lower[j][j]
+            elif abs(residual) > tol:
+                raise ValueError("singular covariance has nonzero coupling")
+    return a
+
+
+def solve_spd(a, b):
+    """Solve A x = b by Cholesky, rejecting non-positive-definite A."""
+    a = covariance(a)
+    n = len(a)
+    b = vector(b, n)
+    lower = [[0.0]*n for _ in range(n)]
+    for i in range(n):
+        for j in range(i+1):
+            r = a[i][j]-math.fsum(lower[i][k]*lower[j][k] for k in range(j))
+            if i == j:
+                if r <= 0.0:
+                    raise ValueError("matrix must be positive definite")
+                lower[i][j] = math.sqrt(r)
+            else:
+                lower[i][j] = r/lower[j][j]
+    y = [0.0]*n
+    for i in range(n):
+        y[i] = (b[i]-math.fsum(lower[i][k]*y[k] for k in range(i)))/lower[i][i]
+    x = [0.0]*n
+    for i in reversed(range(n)):
+        x[i] = (y[i]-math.fsum(lower[k][i]*x[k] for k in range(i+1,n)))/lower[i][i]
+    return vector(x)
+
+
 # NEXT_INCREMENT
