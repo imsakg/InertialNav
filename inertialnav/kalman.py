@@ -19,7 +19,43 @@ class LinearKalman:
         self.x, self.P = x, p
         return list(x)
 
+    def update(self, measurement, observation, measurement_noise):
+        """Correct using a solve, never a matrix inverse, and Joseph covariance."""
+        z = la.vector(measurement)
+        m, n = len(z), len(self.x)
+        h = la.matrix(observation, (m, n))
+        r = la.covariance(measurement_noise, m)
+        la.solve_spd(r, [0.0]*m)
+        hx = la.matvec(h, self.x)
+        innovation = la.vector([value-pred for value, pred in zip(z, hx)])
+        pht = la.matmul(self.P, la.transpose(h))
+        s = la.covariance(la.add(la.matmul(h, pht), r), m)
+        weighted = la.solve_spd(s, innovation)
+        nis = math.fsum(a*b for a, b in zip(innovation, weighted))
+        if not math.isfinite(nis):
+            raise ValueError("innovation statistic overflow")
+        result = UpdateResult(True, tuple(innovation), tuple(tuple(row) for row in s), nis)
+        gain = [la.solve_spd(s, row) for row in pht]
+        delta = la.matvec(gain, innovation)
+        x = la.vector([value+change for value, change in zip(self.x, delta)])
+        kh = la.matmul(gain, h)
+        a = [[float(i == j)-kh[i][j] for j in range(n)] for i in range(n)]
+        p = la.add(la.matmul(la.matmul(a, self.P), la.transpose(a)),
+                   la.matmul(la.matmul(gain, r), la.transpose(gain)))
+        p = la.covariance(p, n)
+        self.x, self.P = x, p
+        return result
+
+
     # CLASS_INCREMENT
+
+
+@dataclass(frozen=True)
+class UpdateResult:
+    accepted: bool
+    innovation: tuple
+    innovation_covariance: tuple
+    nis: float
 
 
 # NEXT_INCREMENT
