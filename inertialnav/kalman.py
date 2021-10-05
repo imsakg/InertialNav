@@ -19,8 +19,10 @@ class LinearKalman:
         self.x, self.P = x, p
         return list(x)
 
-    def update(self, measurement, observation, measurement_noise):
+    def update(self, measurement, observation, measurement_noise, gate=None):
         """Correct using a solve, never a matrix inverse, and Joseph covariance."""
+        if gate is not None and (not math.isfinite(gate) or gate <= 0):
+            raise ValueError("NIS gate must be finite and positive")
         z = la.vector(measurement)
         m, n = len(z), len(self.x)
         h = la.matrix(observation, (m, n))
@@ -34,7 +36,10 @@ class LinearKalman:
         nis = math.fsum(a*b for a, b in zip(innovation, weighted))
         if not math.isfinite(nis):
             raise ValueError("innovation statistic overflow")
-        result = UpdateResult(True, tuple(innovation), tuple(tuple(row) for row in s), nis)
+        accepted = gate is None or nis <= gate
+        result = UpdateResult(accepted, tuple(innovation), tuple(tuple(row) for row in s), nis)
+        if not accepted:
+            return result
         gain = [la.solve_spd(s, row) for row in pht]
         delta = la.matvec(gain, innovation)
         x = la.vector([value+change for value, change in zip(self.x, delta)])

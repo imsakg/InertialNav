@@ -48,4 +48,18 @@ class CorrectionTests(unittest.TestCase):
             self.assertEqual((kf.x, kf.P), snapshot)
 
 
+class InnovationGateTests(unittest.TestCase):
+    def test_gate_reports_rejection_without_mutating_state(self):
+        kf = LinearKalman([0], [[1]])
+        report = kf.update([100], [[1]], [[1]], gate=9)
+        self.assertFalse(report.accepted)
+        self.assertEqual(kf.x, [0])
+        self.assertEqual(kf.P, [[1]])
+        self.assertAlmostEqual(report.nis, 5000)
+        self.assertTrue(kf.update([1], [[1]], [[1]], gate=9).accepted)
+        for gate in (0, -1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                kf.update([1], [[1]], [[1]], gate=gate)
+
+
 # NEXT_INCREMENT
