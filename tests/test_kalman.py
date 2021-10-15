@@ -62,4 +62,17 @@ class InnovationGateTests(unittest.TestCase):
                 kf.update([1], [[1]], [[1]], gate=gate)
 
 
+class ControlTests(unittest.TestCase):
+    def test_control_prediction_and_argument_pairing(self):
+        kf = LinearKalman([0, 1], la.identity(2))
+        kf.predict([[1, 1], [0, 1]], [[0, 0], [0, 0]], control=[2], control_matrix=[[0.5], [1]])
+        self.assertEqual(kf.x, [2, 3])
+        before = copy.deepcopy((kf.x, kf.P))
+        for kwargs in ({'control': [1]}, {'control_matrix': [[1], [1]]},
+                       {'control': [1, 2], 'control_matrix': [[1], [1]]}):
+            with self.assertRaises(ValueError):
+                kf.predict(la.identity(2), [[0, 0], [0, 0]], **kwargs)
+            self.assertEqual((kf.x, kf.P), before)
+
+
 # NEXT_INCREMENT

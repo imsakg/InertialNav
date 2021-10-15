@@ -10,11 +10,18 @@ class LinearKalman:
         self.x = la.vector(state)
         self.P = la.covariance(covariance, len(self.x))
 
-    def predict(self, transition, process_noise):
+    def predict(self, transition, process_noise, control=None, control_matrix=None):
         n = len(self.x)
         f = la.matrix(transition, (n, n))
         q = la.covariance(process_noise, n)
         x = la.matvec(f, self.x)
+        if (control is None) != (control_matrix is None):
+            raise ValueError("provide both control and control_matrix")
+        if control is not None:
+            u = la.vector(control)
+            b = la.matrix(control_matrix, (n, len(u)))
+            change = la.matvec(b, u)
+            x = la.vector([value+delta for value, delta in zip(x, change)])
         p = la.covariance(la.add(la.matmul(la.matmul(f, self.P), la.transpose(f)), q), n)
         self.x, self.P = x, p
         return list(x)
