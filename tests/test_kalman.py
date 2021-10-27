@@ -75,4 +75,20 @@ class ControlTests(unittest.TestCase):
             self.assertEqual((kf.x, kf.P), before)
 
 
+class MotionModelTests(unittest.TestCase):
+    def test_exact_white_acceleration_discretization(self):
+        from inertialnav.kalman import constant_velocity_model
+        f, q, b = constant_velocity_model(2, 3, axes=1)
+        self.assertEqual(f, [[1, 2], [0, 1]])
+        self.assertEqual(q, [[8, 6], [6, 6]])
+        self.assertEqual(b, [[2], [2]])
+        f, q, b = constant_velocity_model(0.1, 0, axes=3)
+        self.assertEqual(len(f), 6)
+        self.assertEqual(f[0][3], 0.1)
+        self.assertEqual(q, [[0]*6 for unused in range(6)])
+        for dt, noise in ((0, 1), (-1, 1), (1, -1), (float('inf'), 1)):
+            with self.assertRaises(ValueError):
+                constant_velocity_model(dt, noise)
+
+
 # NEXT_INCREMENT

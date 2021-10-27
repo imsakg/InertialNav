@@ -70,4 +70,28 @@ class UpdateResult:
     nis: float
 
 
+def constant_velocity_model(dt, acceleration_psd, axes=3):
+    """F/Q/B for [position..., velocity...] and white acceleration PSD.
+
+    PSD has units (m/s^2)^2/Hz. Control is a constant acceleration per interval;
+    Q integrates continuous white acceleration, not a held random sample.
+    """
+    if not math.isfinite(dt) or dt <= 0 or not math.isfinite(acceleration_psd) or acceleration_psd < 0:
+        raise ValueError("dt must be positive and acceleration PSD nonnegative")
+    if isinstance(axes, bool) or not isinstance(axes, int) or axes <= 0:
+        raise ValueError("axes must be a positive integer")
+    n = 2*axes
+    f = la.identity(n)
+    q = [[0.0]*n for unused in range(n)]
+    b = [[0.0]*axes for unused in range(n)]
+    for i in range(axes):
+        f[i][i+axes] = dt
+        q[i][i] = acceleration_psd*dt**3/3
+        q[i][i+axes] = q[i+axes][i] = acceleration_psd*dt**2/2
+        q[i+axes][i+axes] = acceleration_psd*dt
+        b[i][i] = dt**2/2
+        b[i+axes][i] = dt
+    return la.matrix(f), la.covariance(q), la.matrix(b)
+
+
 # NEXT_INCREMENT
