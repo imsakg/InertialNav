@@ -33,4 +33,25 @@ def sample_interval(first, second, max_gap=None):
     return dt
 
 
+@dataclass(frozen=True)
+class Calibration:
+    """Per-axis corrected = (raw - bias) * scale; no mounting rotation."""
+    gyro_bias: tuple = (0.0, 0.0, 0.0)
+    accel_bias: tuple = (0.0, 0.0, 0.0)
+    gyro_scale: tuple = (1.0, 1.0, 1.0)
+    accel_scale: tuple = (1.0, 1.0, 1.0)
+
+    def __post_init__(self):
+        for name in ('gyro_bias', 'accel_bias', 'gyro_scale', 'accel_scale'):
+            values = tuple(vector(getattr(self, name), 3))
+            if name.endswith('scale') and any(value <= 0 for value in values):
+                raise ValueError("calibration scales must be positive")
+            object.__setattr__(self, name, values)
+
+    def correct(self, sample):
+        gyro = [(raw-bias)*scale for raw, bias, scale in zip(sample.gyro, self.gyro_bias, self.gyro_scale)]
+        accel = [(raw-bias)*scale for raw, bias, scale in zip(sample.accel, self.accel_bias, self.accel_scale)]
+        return ImuSample(sample.time, gyro, accel)
+
+
 # NEXT_INCREMENT

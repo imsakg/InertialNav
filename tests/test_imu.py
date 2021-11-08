@@ -17,4 +17,19 @@ class SampleTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sample_interval(a, ImuSample(t, [0]*3, [0]*3), max_gap=0.1)
 
+class CalibrationTests(unittest.TestCase):
+    def test_bias_scale_correction_retains_time(self):
+        from inertialnav.imu import Calibration
+        calibration = Calibration(gyro_bias=(1, 0, -1), accel_bias=(0, 1, 0),
+                                  gyro_scale=(2, 1, 1), accel_scale=(1, 2, 1))
+        raw = ImuSample(2, [2, 3, 4], [4, 5, 6])
+        calibrated = calibration.correct(raw)
+        self.assertEqual(calibrated, ImuSample(2, [2, 3, 5], [4, 8, 6]))
+        self.assertEqual(raw.gyro, (2, 3, 4))
+        for kwargs in ({'accel_scale': (1, 0, 1)}, {'gyro_bias': (0, 0)},
+                       {'gyro_scale': (1, float('nan'), 1)}):
+            with self.assertRaises(ValueError):
+                Calibration(**kwargs)
+
+
 # NEXT_INCREMENT
