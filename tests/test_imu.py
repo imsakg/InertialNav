@@ -32,4 +32,21 @@ class CalibrationTests(unittest.TestCase):
                 Calibration(**kwargs)
 
 
+class IntegrationTests(unittest.TestCase):
+    def test_trapezoidal_rate_integrals(self):
+        from inertialnav.imu import integrate_pair, Delta
+        a = ImuSample(0, [1, 0, 0], [0, 2, 0])
+        b = ImuSample(0.5, [3, 0, 0], [0, 4, 0])
+        delta = integrate_pair(a, b)
+        self.assertEqual(delta.angle, (1, 0, 0))
+        self.assertEqual(delta.velocity, (0, 1.5, 0))
+        self.assertEqual(delta.dt, 0.5)
+        self.assertEqual(delta.velocity_frame, 'midpoint')
+        for args in ((0, [0]*3, [0]*3), (1, [0]*2, [0]*3)):
+            with self.assertRaises(ValueError):
+                Delta(*args)
+        with self.assertRaises(ValueError):
+            Delta(1, [0]*3, [0]*3, velocity_frame='earth')
+
+
 # NEXT_INCREMENT

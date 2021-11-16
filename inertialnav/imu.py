@@ -54,4 +54,32 @@ class Calibration:
         return ImuSample(sample.time, gyro, accel)
 
 
+@dataclass(frozen=True)
+class Delta:
+    """Integrated angle and force. Raw force uses midpoint-body approximation.
+
+    Coning/sculling-corrected velocity increments are expressed in start-body.
+    This distinction prevents applying a body-rotation correction twice.
+    """
+    dt: float
+    angle: tuple
+    velocity: tuple
+    velocity_frame: str = 'midpoint'
+
+    def __post_init__(self):
+        object.__setattr__(self, 'dt', _positive(self.dt, 'dt'))
+        object.__setattr__(self, 'angle', tuple(vector(self.angle, 3)))
+        object.__setattr__(self, 'velocity', tuple(vector(self.velocity, 3)))
+        if self.velocity_frame not in ('midpoint', 'start'):
+            raise ValueError("velocity_frame must be midpoint or start")
+
+
+def integrate_pair(first, second, max_gap=None):
+    """Trapezoidal integrals between two samples; does not remove gravity."""
+    dt = sample_interval(first, second, max_gap)
+    angle = [(a/2+b/2)*dt for a, b in zip(first.gyro, second.gyro)]
+    velocity = [(a/2+b/2)*dt for a, b in zip(first.accel, second.accel)]
+    return Delta(dt, angle, velocity)
+
+
 # NEXT_INCREMENT
