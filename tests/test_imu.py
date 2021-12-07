@@ -49,4 +49,21 @@ class IntegrationTests(unittest.TestCase):
             Delta(1, [0]*3, [0]*3, velocity_frame='earth')
 
 
+class ConingTests(unittest.TestCase):
+    def test_two_sample_cross_terms_and_frame_contract(self):
+        from inertialnav.imu import Delta, combine_increments
+        a = Delta(0.01, [0.1, 0, 0], [0, 0, 1])
+        b = Delta(0.01, [0, 0.2, 0], [0, 0, 1])
+        result = combine_increments(a, b)
+        self.assertAlmostEqual(result.angle[2], 2/3*0.02)
+        self.assertAlmostEqual(result.velocity[0], 0.2-2/3*0.2)
+        self.assertAlmostEqual(result.velocity[1], -0.1-2/3*0.1)
+        self.assertEqual(result.velocity_frame, 'start')
+        self.assertEqual(result.dt, 0.02)
+        with self.assertRaises(ValueError):
+            combine_increments(a, Delta(0.02, [0]*3, [0]*3))
+        with self.assertRaises(ValueError):
+            combine_increments(result, result)
+
+
 # NEXT_INCREMENT
