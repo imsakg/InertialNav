@@ -107,4 +107,25 @@ def combine_increments(first, second):
     return Delta(first.dt+second.dt, angle, velocity, velocity_frame='start')
 
 
+class LowPass:
+    """First-order vector low-pass, exact gain for each interval."""
+    def __init__(self, cutoff_hz):
+        self.cutoff_hz = _positive(cutoff_hz, 'cutoff_hz')
+        self.value = None
+
+    def reset(self):
+        self.value = None
+
+    def update(self, values, dt):
+        values = vector(values, 3)
+        dt = _positive(dt, 'dt')
+        gain = -math.expm1(-2*math.pi*self.cutoff_hz*dt)
+        if self.value is None:
+            result = values
+        else:
+            result = vector([(1-gain)*old+gain*new for old, new in zip(self.value, values)])
+        self.value = tuple(result)
+        return self.value
+
+
 # NEXT_INCREMENT

@@ -66,4 +66,22 @@ class ConingTests(unittest.TestCase):
             combine_increments(result, result)
 
 
+class LowPassTests(unittest.TestCase):
+    def test_exact_first_order_gain_and_reset(self):
+        from inertialnav.imu import LowPass
+        filt = LowPass(1)
+        self.assertEqual(filt.update([0, 0, 0], 0.1), (0, 0, 0))
+        value = filt.update([1, 2, 3], 1)
+        for i in range(3):
+            self.assertAlmostEqual(value[i], (i+1)*(1-math.exp(-2*math.pi)))
+        before = filt.value
+        for bad, dt in (([1, 2], 1), ([0]*3, 0), ([float('nan')]*3, 1)):
+            with self.assertRaises(ValueError):
+                filt.update(bad, dt)
+            self.assertEqual(filt.value, before)
+        filt.reset()
+        self.assertIsNone(filt.value)
+        self.assertEqual(filt.update([1, 2, 3], 0.1), (1, 2, 3))
+
+
 # NEXT_INCREMENT
