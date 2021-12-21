@@ -84,4 +84,20 @@ class LowPassTests(unittest.TestCase):
         self.assertEqual(filt.update([1, 2, 3], 0.1), (1, 2, 3))
 
 
+class StationaryTests(unittest.TestCase):
+    def test_full_window_required_and_motion_resets_decision(self):
+        from inertialnav.imu import StationaryDetector
+        detector = StationaryDetector(window=4)
+        for i in range(3):
+            self.assertFalse(detector.push(ImuSample(i, [0]*3, [0, 0, -9.80665])))
+        self.assertTrue(detector.push(ImuSample(3, [0]*3, [0, 0, -9.80665])))
+        self.assertFalse(detector.push(ImuSample(4, [0, 0, 0.1], [0, 0, -9.80665])))
+        with self.assertRaises(ValueError):
+            detector.push(ImuSample(4, [0]*3, [0, 0, -9.80665]))
+        self.assertFalse(detector.push(ImuSample(5, [0]*3, [1, 0, -9.80665])))
+        for window in (0, 1, True, 2.5):
+            with self.assertRaises(ValueError):
+                StationaryDetector(window=window)
+
+
 # NEXT_INCREMENT

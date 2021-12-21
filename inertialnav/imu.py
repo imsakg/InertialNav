@@ -128,4 +128,35 @@ class LowPass:
         return self.value
 
 
+class StationaryDetector:
+    """Heuristic dwell detector, not proof of zero translational velocity."""
+    def __init__(self, window=20, gyro_threshold=0.02, accel_tolerance=0.15,
+                 accel_std=0.05, gravity=GRAVITY):
+        if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+            raise ValueError("stationary window must contain at least two samples")
+        self.samples = deque(maxlen=window)
+        self.gyro_threshold = _positive(gyro_threshold, 'gyro_threshold')
+        self.accel_tolerance = _positive(accel_tolerance, 'accel_tolerance')
+        self.accel_std = _positive(accel_std, 'accel_std')
+        self.gravity = _positive(gravity, 'gravity')
+
+    def push(self, sample):
+        if self.samples:
+            sample_interval(self.samples[-1], sample)
+        self.samples.append(sample)
+        if len(self.samples) != self.samples.maxlen:
+            return False
+        if any(math.hypot(*s.gyro) > self.gyro_threshold for s in self.samples):
+            return False
+        n = len(self.samples)
+        mean = [math.fsum(s.accel[i]/n for s in self.samples) for i in range(3)]
+        if abs(math.hypot(*mean)-self.gravity) > self.accel_tolerance:
+            return False
+        for i in range(3):
+            std = math.sqrt(math.fsum((s.accel[i]-mean[i])**2/n for s in self.samples))
+            if std > self.accel_std:
+                return False
+        return True
+
+
 # NEXT_INCREMENT
