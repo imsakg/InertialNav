@@ -159,4 +159,10 @@ class StationaryDetector:
         return True
 
 
+def integrate_attitude(attitude, delta_angle):
+    """Right-multiply a body angular increment onto body-to-NED attitude."""
+    from .rotations import normalize, multiply, from_rotation_vector
+    return normalize(multiply(normalize(attitude), from_rotation_vector(delta_angle)))
+
+
 # NEXT_INCREMENT

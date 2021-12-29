@@ -100,4 +100,17 @@ class StationaryTests(unittest.TestCase):
                 StationaryDetector(window=window)
 
 
+class AttitudeIntegrationTests(unittest.TestCase):
+    def test_body_rate_attitude_increments_keep_unit_norm(self):
+        from inertialnav.imu import integrate_attitude
+        from inertialnav.rotations import to_euler
+        q = (1, 0, 0, 0)
+        for unused in range(1000):
+            q = integrate_attitude(q, [0, 0, math.pi/2000])
+        self.assertAlmostEqual(math.hypot(*q), 1, places=14)
+        self.assertAlmostEqual(to_euler(q)[2], math.pi/2, places=12)
+        with self.assertRaises(ValueError):
+            integrate_attitude([0, 0, 0, 0], [0]*3)
+
+
 # NEXT_INCREMENT
