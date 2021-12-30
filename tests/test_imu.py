@@ -113,4 +113,29 @@ class AttitudeIntegrationTests(unittest.TestCase):
             integrate_attitude([0, 0, 0, 0], [0]*3)
 
 
+class StrapdownTests(unittest.TestCase):
+    def test_rest_and_constant_acceleration_in_ned(self):
+        from inertialnav.imu import StrapdownState, Delta, GRAVITY
+        state = StrapdownState()
+        for unused in range(100):
+            state = state.propagate(Delta(0.01, [0]*3, [0, 0, -GRAVITY*0.01]))
+        self.assertAlmostEqual(math.hypot(*state.velocity), 0, places=12)
+        state = StrapdownState().propagate(Delta(2, [0]*3, [2, 0, -GRAVITY*2]))
+        self.assertEqual(state.velocity, (2, 0, 0))
+        self.assertEqual(state.position, (2, 0, 0))
+
+    def test_tilted_gravity_and_corrected_frame(self):
+        from inertialnav.imu import StrapdownState, Delta, GRAVITY
+        from inertialnav.rotations import from_euler, rotate, conjugate
+        q = from_euler(0.4, -0.3, 1)
+        body_force = rotate(conjugate(q), (0, 0, -GRAVITY))
+        state = StrapdownState(attitude=q).propagate(Delta(1, [0]*3, body_force))
+        self.assertAlmostEqual(math.hypot(*state.velocity), 0, places=12)
+        start = StrapdownState()
+        result = start.propagate(Delta(1, [0, 0, math.pi/2], [1, 0, -GRAVITY], 'start'))
+        self.assertAlmostEqual(result.velocity[0], 1)
+        self.assertAlmostEqual(result.velocity[1], 0)
+        self.assertEqual(start.position, (0, 0, 0))
+
+
 # NEXT_INCREMENT

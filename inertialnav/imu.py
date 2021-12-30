@@ -165,4 +165,32 @@ def integrate_attitude(attitude, delta_angle):
     return normalize(multiply(normalize(attitude), from_rotation_vector(delta_angle)))
 
 
+@dataclass(frozen=True)
+class StrapdownState:
+    """Local flat-Earth state; no Earth rotation, Coriolis or transport rates."""
+    attitude: tuple = (1.0, 0.0, 0.0, 0.0)
+    position: tuple = (0.0, 0.0, 0.0)
+    velocity: tuple = (0.0, 0.0, 0.0)
+
+    def __post_init__(self):
+        from .rotations import normalize
+        object.__setattr__(self, 'attitude', tuple(normalize(self.attitude)))
+        object.__setattr__(self, 'position', tuple(vector(self.position, 3)))
+        object.__setattr__(self, 'velocity', tuple(vector(self.velocity, 3)))
+
+    def propagate(self, delta, gravity=GRAVITY):
+        from .rotations import rotate
+        gravity = _positive(gravity, 'gravity')
+        end = integrate_attitude(self.attitude, delta.angle)
+        if delta.velocity_frame == 'start':
+            force_attitude = self.attitude
+        else:
+            force_attitude = integrate_attitude(self.attitude, [angle/2 for angle in delta.angle])
+        dv = list(rotate(force_attitude, delta.velocity))
+        dv[2] += gravity*delta.dt
+        velocity = vector([v+change for v, change in zip(self.velocity, dv)])
+        position = vector([p+(v/2+w/2)*delta.dt for p, v, w in zip(self.position, self.velocity, velocity)])
+        return StrapdownState(end, tuple(position), tuple(velocity))
+
+
 # NEXT_INCREMENT
