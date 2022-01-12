@@ -32,6 +32,13 @@ class NavigationFilter:
         self.attitude, self.time = propagated.attitude, next_time
         return self.state
 
+    def update_position(self, position_ned, covariance, gate=16.27):
+        """Fuse a co-located local NED fix with full 3x3 covariance (m^2)."""
+        z = la.vector(position_ned, 3)
+        h = [[float(i == j) for j in range(6)] for i in range(3)]
+        return self.filter.update(z, h, covariance, gate=gate)
+
+
     # CLASS_INCREMENT
 
 

@@ -18,4 +18,17 @@ class PredictionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             NavigationFilter(acceleration_psd=-1)
 
+class PositionAidTests(unittest.TestCase):
+    def test_position_update_and_outlier_rejection(self):
+        nav = NavigationFilter()
+        result = nav.update_position([1, 0, 0], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.assertTrue(result.accepted)
+        self.assertAlmostEqual(nav.state.position[0], 0.5)
+        before = nav.state
+        self.assertFalse(nav.update_position([100, 0, 0], la.identity(3)).accepted)
+        self.assertEqual(nav.state, before)
+        with self.assertRaises(ValueError):
+            nav.update_position([1, 2], la.identity(3))
+
+
 # NEXT_INCREMENT
