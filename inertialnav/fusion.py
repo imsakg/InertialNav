@@ -39,6 +39,13 @@ class NavigationFilter:
         return self.filter.update(z, h, covariance, gate=gate)
 
 
+    def update_velocity(self, velocity_ned, covariance, gate=16.27):
+        """Fuse NED velocity with full covariance in (m/s)^2."""
+        z = la.vector(velocity_ned, 3)
+        h = [[float(i+3 == j) for j in range(6)] for i in range(3)]
+        return self.filter.update(z, h, covariance, gate=gate)
+
+
     # CLASS_INCREMENT
 
 

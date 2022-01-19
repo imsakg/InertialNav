@@ -31,4 +31,15 @@ class PositionAidTests(unittest.TestCase):
             nav.update_position([1, 2], la.identity(3))
 
 
+class VelocityAidTests(unittest.TestCase):
+    def test_velocity_aiding_corrects_correlated_position(self):
+        nav = NavigationFilter()
+        nav.predict(Delta(0.5, [0]*3, [0, 0, -GRAVITY*0.5]))
+        report = nav.update_velocity([1, 0, 0], [[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1]])
+        self.assertTrue(report.accepted)
+        self.assertGreater(nav.state.velocity[0], 0.9)
+        self.assertGreater(nav.state.position[0], 0.4)
+        self.assertFalse(nav.update_velocity([500, 0, 0], la.identity(3)).accepted)
+
+
 # NEXT_INCREMENT
