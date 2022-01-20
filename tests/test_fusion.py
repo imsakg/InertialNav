@@ -42,4 +42,21 @@ class VelocityAidTests(unittest.TestCase):
         self.assertFalse(nav.update_velocity([500, 0, 0], la.identity(3)).accepted)
 
 
+class VerticalAndRestAidTests(unittest.TestCase):
+    def test_altitude_is_up_and_stationary_requires_confirmation(self):
+        nav = NavigationFilter()
+        self.assertTrue(nav.update_altitude(2, 1).accepted)
+        self.assertAlmostEqual(nav.state.position[2], -1)
+        nav.update_velocity([0.2, 0, 0], la.identity(3))
+        before = nav.state
+        self.assertIsNone(nav.update_zero_velocity(False))
+        self.assertEqual(nav.state, before)
+        self.assertTrue(nav.update_zero_velocity(True).accepted)
+        self.assertLess(abs(nav.state.velocity[0]), 0.01)
+        with self.assertRaises(ValueError):
+            nav.update_zero_velocity('probably')
+        with self.assertRaises(ValueError):
+            nav.update_altitude(1, 0)
+
+
 # NEXT_INCREMENT

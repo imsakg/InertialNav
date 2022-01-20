@@ -46,6 +46,22 @@ class NavigationFilter:
         return self.filter.update(z, h, covariance, gate=gate)
 
 
+    def update_altitude(self, height_up, variance, gate=9.0):
+        """Height is up-positive metres relative to the NED origin datum."""
+        height = la.vector([height_up])[0]
+        return self.filter.update([-height], [[0, 0, 1, 0, 0, 0]], [[variance]], gate=gate)
+
+    def update_zero_velocity(self, stationary, variance=0.01, gate=16.27):
+        """Apply a pseudo-observation only after explicit stationary confirmation."""
+        if not isinstance(stationary, bool):
+            raise ValueError("stationary confirmation must be a boolean")
+        if not stationary:
+            return None
+        variance = _positive(variance, 'velocity variance')
+        covariance = [[variance*float(i == j) for j in range(3)] for i in range(3)]
+        return self.update_velocity([0, 0, 0], covariance, gate=gate)
+
+
     # CLASS_INCREMENT
 
 
