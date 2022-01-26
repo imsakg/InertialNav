@@ -59,4 +59,24 @@ class VerticalAndRestAidTests(unittest.TestCase):
             nav.update_altitude(1, 0)
 
 
+class CompassTests(unittest.TestCase):
+    def test_heading_wrap_and_preserved_roll_pitch(self):
+        from inertialnav.imu import StrapdownState
+        from inertialnav.rotations import from_euler, to_euler
+        nav = NavigationFilter(state=StrapdownState(attitude=from_euler(0.3, -0.2, math.radians(179))))
+        report = nav.update_heading(math.radians(-179), math.radians(2)**2)
+        self.assertTrue(report.accepted)
+        self.assertAlmostEqual(report.innovation[0], math.radians(2))
+        roll, pitch, yaw = to_euler(nav.attitude)
+        self.assertAlmostEqual(roll, 0.3)
+        self.assertAlmostEqual(pitch, -0.2)
+        self.assertAlmostEqual(yaw, math.radians(-179), delta=0.001)
+        before = (nav.attitude, nav.heading_variance)
+        self.assertFalse(nav.update_heading(0, 0.001).accepted)
+        self.assertEqual((nav.attitude, nav.heading_variance), before)
+        vertical = NavigationFilter(state=StrapdownState(attitude=from_euler(0, math.pi/2, 0)))
+        with self.assertRaises(ValueError):
+            vertical.update_heading(0, 0.1)
+
+
 # NEXT_INCREMENT

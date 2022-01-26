@@ -16,6 +16,8 @@ class NavigationFilter:
         self.filter = LinearKalman(state.position+state.velocity,
                                    covariance if covariance is not None else la.identity(6))
         self.attitude = state.attitude
+        self.heading_variance = 1.0
+        self.gyro_noise_psd = 0.001
         self.time = _positive(time, 'time', allow_zero=True)
         self.acceleration_psd = _positive(acceleration_psd, 'acceleration_psd', allow_zero=True)
 
@@ -29,7 +31,9 @@ class NavigationFilter:
         acceleration = [(a-b)/delta.dt for a, b in zip(propagated.velocity, self.state.velocity)]
         f, q, b = constant_velocity_model(delta.dt, self.acceleration_psd)
         self.filter.predict(f, q, control=acceleration, control_matrix=b)
+        heading_variance = _positive(self.heading_variance+self.gyro_noise_psd*delta.dt, "heading variance")
         self.attitude, self.time = propagated.attitude, next_time
+        self.heading_variance = heading_variance
         return self.state
 
     def update_position(self, position_ned, covariance, gate=16.27):
@@ -60,6 +64,26 @@ class NavigationFilter:
         variance = _positive(variance, 'velocity variance')
         covariance = [[variance*float(i == j) for j in range(3)] for i in range(3)]
         return self.update_velocity([0, 0, 0], covariance, gate=gate)
+
+
+    def update_heading(self, heading, variance, gate=9.0):
+        """Fuse a declination-corrected NED heading (radians) in a separate scalar filter.
+
+        Heading covariance is not coupled to translation or tilt. Raw magnetic
+        axes are not headings; tilt compensation/calibration belongs upstream.
+        """
+        from .analysis import wrapped_angle_error
+        from .rotations import to_euler, from_euler, multiply, normalize
+        roll, pitch, yaw = to_euler(self.attitude)
+        if abs(math.cos(pitch)) < 1e-3:
+            raise ValueError("Euler heading is unobservable near vertical pitch")
+        innovation = wrapped_angle_error(heading, yaw)
+        heading_filter = LinearKalman([0], [[self.heading_variance]])
+        result = heading_filter.update([innovation], [[1]], [[variance]], gate=gate)
+        if result.accepted:
+            attitude = normalize(multiply(from_euler(0, 0, heading_filter.x[0]), self.attitude))
+            self.attitude, self.heading_variance = attitude, heading_filter.P[0][0]
+        return result
 
 
     # CLASS_INCREMENT
