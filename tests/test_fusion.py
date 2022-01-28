@@ -79,4 +79,29 @@ class CompassTests(unittest.TestCase):
             vertical.update_heading(0, 0.1)
 
 
+class TimingAndHealthTests(unittest.TestCase):
+    def test_rejected_or_stale_data_never_refreshes_aiding(self):
+        nav = NavigationFilter(max_step=0.2)
+        self.assertFalse(nav.aiding_fresh('position', 1))
+        nav.update_position([0]*3, la.identity(3), timestamp=0)
+        self.assertTrue(nav.aiding_fresh('position', 0.1))
+        nav.predict_to(0.1, Delta(0.1, [0]*3, [0, 0, -GRAVITY*0.1]))
+        before = (nav.state, copy.deepcopy(nav.filter.P), nav.time)
+        for stamp in (0, 0.2, float('nan')):
+            with self.assertRaises(ValueError):
+                nav.update_position([1]*3, la.identity(3), timestamp=stamp)
+            self.assertEqual((nav.state, nav.filter.P, nav.time), before)
+        self.assertFalse(nav.update_position([999]*3, la.identity(3)).accepted)
+        self.assertFalse(nav.aiding_fresh('position', 0.05))
+        self.assertEqual(nav.aiding_rejections['position'], 1)
+        nav.update_zero_velocity(True)
+        self.assertTrue(nav.aiding_fresh('zero_velocity', 0.1))
+        self.assertFalse(nav.aiding_fresh('velocity', 0.1))
+        before = (nav.state, copy.deepcopy(nav.filter.P), nav.time)
+        for stamp, delta in ((0.3, Delta(0.1, [0]*3, [0]*3)), (0.4, Delta(0.3, [0]*3, [0]*3))):
+            with self.assertRaises(ValueError):
+                nav.predict_to(stamp, delta)
+            self.assertEqual((nav.state, nav.filter.P, nav.time), before)
+
+
 # NEXT_INCREMENT
