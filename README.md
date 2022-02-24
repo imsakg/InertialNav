@@ -77,3 +77,19 @@ You can load other test data by modifying the file load command at the top of th
  * StateDataOut.txt
  * TasFuse.txt
  * VelPosFuse.txt
+
+### Offline Python reference toolkit
+
+The additive, standard-library Python toolkit includes checked Kalman filtering,
+IMU calibration/integration, loose GPS/barometer/heading fusion, WGS-84 and attitude
+transforms, and quantitative offline diagnostics. It preserves the original
+C++/MATLAB prototypes; it is not a production flight estimator.
+
+- [Quick start, models, tuning and limitations](docs/navigation-toolkit.md)
+- [Coordinate and quaternion conventions](docs/coordinates.md)
+- [State-log validation and error analysis](docs/analysis.md)
+
+Run `make verify` from the repository root with Python 3.9+. The synthetic simulation
+and strict CSV replay examples require no dependencies. The native C++ build test
+runs when a compiler and make are available. `code/validate_output.py` now performs
+real sanity checks instead of the former unconditional success message.
