@@ -7,6 +7,8 @@ import math
 
 
 def vector(values, size=None):
+    if isinstance(values, (str, bytes)):
+        raise ValueError("expected numeric components, not serialized text")
     try:
         result = [float(value) for value in values]
     except (TypeError, ValueError, OverflowError) as exc:
@@ -65,58 +67,71 @@ def outer(a, b):
     return matrix([[x*y for y in b] for x in a])
 
 
-def covariance(rows, size=None):
-    """Return a finite symmetric positive-semidefinite covariance copy."""
+def _scaled_covariance(rows, size=None):
+    """Symmetrize within dimensionless tolerance and equilibrate by axis SD."""
     a = matrix(rows)
     n = len(a)
     if len(a[0]) != n or (size is not None and n != size):
         raise ValueError("covariance must be square with the requested size")
-    scale = max(abs(value) for row in a for value in row)
-    tol = 1e-12*scale
+    if any(a[i][i] < 0 for i in range(n)):
+        raise ValueError("covariance diagonals must be nonnegative")
+    scales = [math.sqrt(a[i][i]) for i in range(n)]
+    correlation = [[float(i == j and scales[i] > 0) for j in range(n)] for i in range(n)]
     for i in range(n):
         for j in range(i):
-            if abs(a[i][j]-a[j][i]) > tol:
-                raise ValueError("covariance must be symmetric")
-            a[i][j] = a[j][i] = 0.5*a[i][j]+0.5*a[j][i]
-    # A rank-deficient covariance is valid; zero Cholesky pivots must
-    # have zero residual coupling to all later rows.
+            if scales[i] == 0 or scales[j] == 0:
+                if a[i][j] != 0 or a[j][i] != 0:
+                    raise ValueError("zero-variance axes must have zero cross covariance")
+                continue
+            lower, upper = (a[i][j]/scales[i])/scales[j], (a[j][i]/scales[i])/scales[j]
+            if not math.isfinite(lower) or not math.isfinite(upper) or abs(lower-upper) > 1e-12:
+                raise ValueError("covariance must be symmetric in axis-scaled units")
+            value = lower/2+upper/2
+            if abs(value) > 1+1e-12:
+                raise ValueError("cross covariance violates Cauchy-Schwarz")
+            correlation[i][j] = correlation[j][i] = value
+            a[i][j] = a[j][i] = a[i][j]/2+a[j][i]/2
+    return a, correlation, scales
+
+
+def _cholesky(correlation, definite=False):
+    n = len(correlation)
     lower = [[0.0]*n for _ in range(n)]
     for i in range(n):
         for j in range(i+1):
-            residual = a[i][j]-math.fsum(lower[i][k]*lower[j][k] for k in range(j))
+            r = correlation[i][j]-math.fsum(lower[i][k]*lower[j][k] for k in range(j))
             if i == j:
-                if residual < -tol:
-                    raise ValueError("covariance must be positive semidefinite")
-                lower[i][j] = math.sqrt(max(0.0, residual))
-            elif lower[j][j] > 0.0:
-                lower[i][j] = residual/lower[j][j]
-            elif abs(residual) > tol:
+                if r < -1e-12 or (definite and r <= 0):
+                    raise ValueError("covariance must be positive " + ("definite" if definite else "semidefinite"))
+                lower[i][j] = math.sqrt(max(0.0, r))
+            elif lower[j][j] > 0:
+                lower[i][j] = r/lower[j][j]
+            elif abs(r) > 1e-12:
                 raise ValueError("singular covariance has nonzero coupling")
+    return lower
+
+
+def covariance(rows, size=None):
+    """Validate PSD after axis scaling; tolerate 1e-12 correlation roundoff.
+
+    A large unrelated variance must never mask an indefinite smaller block.
+    Negative diagonals are always rejected, regardless of their magnitude.
+    """
+    a, correlation, unused = _scaled_covariance(rows, size)
+    _cholesky(correlation)
     return a
 
 
 def solve_spd(a, b):
-    """Solve A x = b by Cholesky, rejecting non-positive-definite A."""
-    a = covariance(a)
+    """Solve A x = b by axis-scaled Cholesky without explicit inversion."""
+    a, correlation, scales = _scaled_covariance(a)
     n = len(a)
     b = vector(b, n)
-    lower = [[0.0]*n for _ in range(n)]
-    for i in range(n):
-        for j in range(i+1):
-            r = a[i][j]-math.fsum(lower[i][k]*lower[j][k] for k in range(j))
-            if i == j:
-                if r <= 0.0:
-                    raise ValueError("matrix must be positive definite")
-                lower[i][j] = math.sqrt(r)
-            else:
-                lower[i][j] = r/lower[j][j]
+    lower = _cholesky(correlation, definite=True)
     y = [0.0]*n
     for i in range(n):
-        y[i] = (b[i]-math.fsum(lower[i][k]*y[k] for k in range(i)))/lower[i][i]
-    x = [0.0]*n
+        y[i] = (b[i]/scales[i]-math.fsum(lower[i][k]*y[k] for k in range(i)))/lower[i][i]
+    z = [0.0]*n
     for i in reversed(range(n)):
-        x[i] = (y[i]-math.fsum(lower[k][i]*x[k] for k in range(i+1,n)))/lower[i][i]
-    return vector(x)
-
-
-# NEXT_INCREMENT
+        z[i] = (y[i]-math.fsum(lower[k][i]*z[k] for k in range(i+1,n)))/lower[i][i]
+    return vector([value/scale for value, scale in zip(z, scales)])

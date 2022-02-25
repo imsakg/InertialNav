@@ -89,6 +89,3 @@ class MotionModelTests(unittest.TestCase):
         for dt, noise in ((0, 1), (-1, 1), (1, -1), (float('inf'), 1)):
             with self.assertRaises(ValueError):
                 constant_velocity_model(dt, noise)
-
-
-# NEXT_INCREMENT

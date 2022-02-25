@@ -104,4 +104,23 @@ class TimingAndHealthTests(unittest.TestCase):
             self.assertEqual((nav.state, nav.filter.P, nav.time), before)
 
 
-# NEXT_INCREMENT
+class ClockPrecisionRegressionTests(unittest.TestCase):
+    def test_long_100_hz_run_retains_observed_clock(self):
+        nav = NavigationFilter()
+        delta = Delta(0.01, [0]*3, [0, 0, -GRAVITY*0.01])
+        for index in range(1, 10001):
+            timestamp = index*0.01
+            nav.predict_to(timestamp, delta)
+            self.assertEqual(nav.time, timestamp)
+        self.assertEqual(nav.time, 100)
+
+    def test_epoch_clock_precision_and_invalid_heading_noise_are_atomic(self):
+        nav = NavigationFilter(time=1700000000.0)
+        delta = Delta(0.01, [0]*3, [0, 0, -GRAVITY*0.01])
+        nav.predict_to(1700000000.01, delta)
+        self.assertEqual(nav.time, 1700000000.01)
+        before = (nav.state, copy.deepcopy(nav.filter.P), nav.time)
+        nav.gyro_noise_psd = float('inf')
+        with self.assertRaises(ValueError):
+            nav.predict(delta)
+        self.assertEqual((nav.state, nav.filter.P, nav.time), before)

@@ -42,6 +42,3 @@ class ReplayTests(unittest.TestCase):
             result = subprocess.run([sys.executable, '-m', 'examples.replay_csv', str(path)], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('invalid', result.stderr.lower())
-
-
-# NEXT_INCREMENT

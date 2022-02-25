@@ -120,12 +120,10 @@ class NavigationFilter:
 
     def predict_to(self, timestamp, delta):
         timestamp = _positive(timestamp, 'prediction time', allow_zero=True)
-        if not math.isclose(timestamp-self.time, delta.dt, rel_tol=1e-9, abs_tol=1e-12):
+        tolerance = max(1e-12, 1e-9*delta.dt, 2*math.ulp(timestamp), 2*math.ulp(self.time))
+        if timestamp <= self.time or abs((timestamp-self.time)-delta.dt) > tolerance:
             raise ValueError("prediction timestamp must match the increment interval")
-        return self.predict(delta)
-
-
-    # CLASS_INCREMENT
-
-
-# NEXT_INCREMENT
+        state = self.predict(delta)
+        # Retain the observation clock, not an accumulating floating-point sum.
+        self.time = timestamp
+        return state

@@ -59,8 +59,6 @@ class LinearKalman:
         return result
 
 
-    # CLASS_INCREMENT
-
 
 @dataclass(frozen=True)
 class UpdateResult:
@@ -92,6 +90,3 @@ def constant_velocity_model(dt, acceleration_psd, axes=3):
         b[i][i] = dt**2/2
         b[i+axes][i] = dt
     return la.matrix(f), la.covariance(q), la.matrix(b)
-
-
-# NEXT_INCREMENT

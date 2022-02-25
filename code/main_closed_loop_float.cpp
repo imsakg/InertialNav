@@ -1093,7 +1093,8 @@ void WriteFilterOutput()
     // GPS glitch offset
     fprintf(pGlitchOutFile," %e", float(IMUmsec*0.001f));
     fprintf(pGlitchOutFile," %e %e %e", _ekf->velNED[0], _ekf->velNED[1], _ekf->velNED[2]);
-    fprintf(pGlitchOutFile," %e %e %e", _ekf->posNE[0], _ekf->posNE[1], _ekf->posNE[2]);
+    // posNE has only two axes; log down-positive height without an out-of-bounds read.
+    fprintf(pGlitchOutFile," %e %e %e", _ekf->posNE[0], _ekf->posNE[1], -_ekf->hgtMea);
     fprintf(pGlitchOutFile," %e %e", _ekf->gpsPosGlitchOffsetNE.x, _ekf->gpsPosGlitchOffsetNE.y);
     fprintf(pGlitchOutFile," %e %e\n", _ekf->gpsVelGlitchOffset.x, _ekf->gpsVelGlitchOffset.y);
 

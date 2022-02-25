@@ -191,6 +191,3 @@ class StrapdownState:
         velocity = vector([v+change for v, change in zip(self.velocity, dv)])
         position = vector([p+(v/2+w/2)*delta.dt for p, v, w in zip(self.position, self.velocity, velocity)])
         return StrapdownState(end, tuple(position), tuple(velocity))
-
-
-# NEXT_INCREMENT

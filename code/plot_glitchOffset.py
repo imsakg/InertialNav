@@ -6,7 +6,7 @@ import matplotlib.cbook as cbook
 import numpy as np
 import math
 
-# timestamp, velN, velE, velD, posN, posE, posOffN, posOffE, velOffN, velOffE
+# timestamp, velN, velE, velD, posN, posE, posD (down), posOffN, posOffE, velOffN, velOffE
 data = np.genfromtxt('GlitchOffsetOut.txt', delimiter=' ', skip_header=1,
 	skip_footer=1, names=['time', 'velN', 'velE', 'velD', 'posN', 'posE', 'posD', 'posOffN', 'posOffE', 'velOffN', 'velOffE'])
 
@@ -70,7 +70,7 @@ ax2.legend(handles, labels, loc=2)
 ax3 = fig.add_subplot(313)
 ax3.set_xlabel('time (s)')
 ax3.set_ylabel('(m)')
-ax3.plot(data['time'], -data['posD'], color='r', label='posD')
+ax3.plot(data['time'], data['posD'], color='r', label='posD')
 ax3.plot(data2['time'], data2['Pd'], color='b', label='Pd')
 handles, labels = ax3.get_legend_handles_labels()
 ax3.legend(handles, labels, loc=2)

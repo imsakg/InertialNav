@@ -41,4 +41,15 @@ class CovarianceTests(unittest.TestCase):
         self.assertEqual(original[0][0], 2)
 
 
-# NEXT_INCREMENT
+class MixedScaleRegressionTests(unittest.TestCase):
+    def test_covariance_tolerances_do_not_hide_indefinite_small_blocks(self):
+        for bad in ([[1, 2, 0], [2, 1, 0], [0, 0, 1e14]],
+                    [[-1e-20, 0], [0, 1e14]],
+                    [[1e-20, 1e-10, 0], [0, 1e-20, 0], [0, 0, 1e14]]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                la.covariance(bad)
+        solved = la.solve_spd([[1e-200, 0], [0, 1e200]], [1e-200, 1e200])
+        for value in solved:
+            self.assertAlmostEqual(value, 1)
+        with self.assertRaises(ValueError):
+            la.vector('123')

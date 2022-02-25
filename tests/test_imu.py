@@ -136,6 +136,3 @@ class StrapdownTests(unittest.TestCase):
         self.assertAlmostEqual(result.velocity[0], 1)
         self.assertAlmostEqual(result.velocity[1], 0)
         self.assertEqual(start.position, (0, 0, 0))
-
-
-# NEXT_INCREMENT

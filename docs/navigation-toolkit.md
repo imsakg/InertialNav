@@ -67,7 +67,9 @@ positive definite, not zero. Posterior covariance uses Joseph form:
 Results expose acceptance, residual, full innovation covariance and NIS. A gate is
 a positive **squared Mahalanobis** threshold, not a raw sigma multiplier. Rejected
 or invalid data does not mutate state/covariance. `gate=None` disables rejection.
-Symmetry is checked with scale-relative tolerance; rank-deficient process noise is
+Symmetry and semidefiniteness use 1e-12 dimensionless tolerance after scaling by
+each axis standard deviation, so a large unrelated variance cannot mask an invalid
+small block. Negative diagonals are always rejected. Rank-deficient process noise is
 allowed, but singular measurement/innovation solves are not regularized silently.
 These small dense routines prioritize inspectability over throughput and may
 reject extreme or ill-conditioned floating-point inputs.
@@ -139,7 +141,9 @@ Near-vertical Euler heading is rejected. There is no magnetic disturbance model.
 
 Aiding must be aligned with the current state time (optional `timestamp` is
 checked); delayed/future data is rejected, not retroactively fused. `predict_to`
-checks that the target time matches the interval. Gaps above `max_step` are errors;
+checks that the target time matches the interval with clock-resolution-aware
+tolerance, then retains the observed target time rather than accumulating rounding.
+Gaps above `max_step` are errors;
 do not invent zero-filled data to bridge them. Rejected aids do not refresh
 freshness. A ZUPT refreshes `zero_velocity`, not the independent `velocity` sensor.
 `aiding_rejections` counts gated observations; invalid inputs raise exceptions.
@@ -178,7 +182,10 @@ for RMSE, time alignment, NIS, NEES, ACF and overlapping Allan deviation contrac
 With the bundled `code/InputFilesPX4.zip`, the native C++ replay completed and
 validated 12,165 rows over 1.003–89.997 seconds, with maximum quaternion norm error
 `1.88602067e-7`. These are structural/numerical checks only. Native compilation
-still exposes legacy warning categories; numerical prototype limitations remain.
+still exposes legacy unused-optimization-flag and constructor-initialization-order
+warning categories; numerical prototype limitations remain. The out-of-bounds
+`posNE[2]` diagnostic read is repaired: GlitchOffsetOut now emits the same
+down-positive height as RefVelPosDataOut, with the plotting sign updated together.
 
 ## History provenance
 
